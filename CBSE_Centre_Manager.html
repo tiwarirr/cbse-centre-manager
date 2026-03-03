@@ -1971,6 +1971,87 @@ function buildCodeToDate(cls) {
   return map;
 }
 
+function parseSchoolHeader(text) {
+  if (!text || !text.includes('SCHOOL')) return null;
+  const m = text.match(/SCHOOL\s*-(\d+)\s+(.*?)(?:\s+CENTRE|$)/)
+        || text.match(/SCHOOL\s*-(\d+)\s+(.*)/);
+  if (!m) return null;
+  const schoolCode = m[1].trim();
+  const schoolName = schoolCode === '99999' ? 'PRIVATE CANDIDATE' : m[2].trim();
+  return { schoolCode, schoolName };
+}
+
+function splitTdByBreak(td) {
+  return Array.from(td.childNodes)
+    .filter(n => n.nodeType === 3 || n.nodeName === 'BR')
+    .reduce((acc, n) => {
+      if (n.nodeName === 'BR') acc.push('');
+      else {
+        if (!acc.length) acc.push('');
+        acc[acc.length-1] += n.textContent.trim();
+      }
+      return acc;
+    }, [])
+    .filter(s => s.trim());
+}
+
+function parseSubjectsRawFromRow(tds) {
+  const out = [];
+  const maxSubCol = Math.min(tds.length - 1, 10);
+  for (let i = 4; i <= maxSubCol; i++) {
+    const parts = Array.from(tds[i].childNodes).map(n => n.textContent.trim()).filter(Boolean);
+    const code = parts[0] || '';
+    const med  = parts[1] || '';
+    if (code && /^\d+$/.test(code)) out.push({ code, med });
+  }
+  return out;
+}
+
+function buildDateSubjectsMap(subjectsRaw, codeToDate, subjectCodes) {
+  const dateSubjects = {};
+  subjectsRaw.forEach(({ code }) => {
+    const ds = codeToDate[code];
+    if (!ds || dateSubjects[ds]) return;
+    dateSubjects[ds] = [{ code, name: subjectCodes[code] || code }];
+  });
+  return dateSubjects;
+}
+
+function seatPosFromIndex(cfg, seatInRoom) {
+  const col = cfg.seatDir === 'rowwise'
+    ? ((seatInRoom - 1) % cfg.cols) + 1
+    : Math.floor((seatInRoom - 1) / cfg.rows) + 1;
+  const row = cfg.seatDir === 'rowwise'
+    ? Math.floor((seatInRoom - 1) / cfg.cols) + 1
+    : ((seatInRoom - 1) % cfg.rows) + 1;
+  return { row, col };
+}
+
+function makeSeatedEntry(cand, ds, cfg, seatIndex, roomOffset) {
+  const offset = roomOffset || 0;
+  const seatInRoom = (seatIndex % cfg.perRoom) + 1;
+  const roomNo     = offset + Math.floor(seatIndex / cfg.perRoom) + 1;
+  const pos        = seatPosFromIndex(cfg, seatInRoom);
+  return {
+    roll:         cand.roll,
+    class:        cand.class,
+    name:         cand.name,
+    mother:       cand.mother,
+    father:       cand.father,
+    sex:          cand.sex,
+    cat:          cand.cat,
+    schoolCode:   cand.schoolCode,
+    schoolName:   cand.schoolName,
+    dateSubjects: cand.dateSubjects,
+    roomNo,
+    seatInRoom,
+    row: pos.row,
+    col: pos.col,
+    seatLabel: `R${pos.row}-C${pos.col}`,
+    subjectsToday: formatSubjectsForDate(cand, ds),
+  };
+}
+
 function parseHTML(htmlString, cls) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlString, 'text/html');
@@ -1988,13 +2069,10 @@ function parseHTML(htmlString, cls) {
     const fullTd = row.querySelector('td[colspan="13"]');
     if (fullTd) {
       const txt = fullTd.textContent.replace(/\s+/g,' ').trim();
-      if (txt.includes('SCHOOL')) {
-        const m = txt.match(/SCHOOL\s*-(\d+)\s+(.*?)(?:\s+CENTRE|$)/);
-        const m2 = m || txt.match(/SCHOOL\s*-(\d+)\s+(.*)/);
-        if (m2) {
-          currentSchoolCode = m2[1].trim();
-          currentSchoolName = currentSchoolCode === '99999' ? 'PRIVATE CANDIDATE' : m2[2].trim();
-        }
+      const school = parseSchoolHeader(txt);
+      if (school) {
+        currentSchoolCode = school.schoolCode;
+        currentSchoolName = school.schoolName;
       }
       return;
     }
@@ -2005,48 +2083,19 @@ function parseHTML(htmlString, cls) {
     if (!/^\d+$/.test(roll) || seenRolls.has(roll)) return;
     seenRolls.add(roll);
 
-    // Helper: split a TD's content by <BR> tags
-    const brSplit = td => Array.from(td.childNodes)
-      .filter(n => n.nodeType === 3 || n.nodeName === 'BR')
-      .reduce((acc, n) => {
-        if (n.nodeName === 'BR') acc.push('');
-        else { if (!acc.length) acc.push(''); acc[acc.length-1] += n.textContent.trim(); }
-        return acc;
-      }, []).filter(s => s.trim());
-
     // td[2]: Name / Mother / Father (BR-separated)
-    const nArr  = brSplit(tds[2]);
+    const nArr  = splitTdByBreak(tds[2]);
     const name   = nArr[0] || '';
     const mother = nArr[1] || '';
     const father = nArr[2] || '';
 
     // td[3]: Sex / Category / NA (BR-separated — ignore 3rd part)
-    const infoArr = brSplit(tds[3]);
+    const infoArr = splitTdByBreak(tds[3]);
     const sex = infoArr[0] || '';
     const cat = infoArr[1] || '';
 
-    // Parse subjects: TD[4] to TD[10] (7 possible columns)
-    const subjectsRaw = [];
-    const maxSubCol = Math.min(tds.length - 1, 10);
-    for (let i = 4; i <= maxSubCol; i++) {
-      const parts = Array.from(tds[i].childNodes)
-        .map(n => n.textContent.trim()).filter(Boolean);
-      const code = parts[0] || '';
-      const med  = parts[1] || '';
-      if (code && /^\d+$/.test(code)) subjectsRaw.push({ code, med });
-    }
-
-    // Build date→subjects map
-    // Each date gets exactly ONE subject entry — a student cannot sit two exams on the same day.
-    // If two subject codes map to the same date (data anomaly), keep the first encountered.
-    const dateSubjects = {};
-    subjectsRaw.forEach(({ code }) => {
-      const ds = codeToDate[code];
-      if (!ds) return;
-      if (dateSubjects[ds]) return;   // already assigned a subject for this date — skip
-      const sname = subjectCodes[code] || code;
-      dateSubjects[ds] = [{ code, name: sname }];
-    });
+    const subjectsRaw = parseSubjectsRawFromRow(tds);
+    const dateSubjects = buildDateSubjectsMap(subjectsRaw, codeToDate, subjectCodes);
 
     candidates.push({
       roll, class: cls, name, mother, father, sex, cat,
@@ -2163,26 +2212,6 @@ function buildSeating(candidates, cfg, targetDate) {
 
     if (cfg.split === 'class') {
       // Assign rooms independently per class, then merge
-      const seatFn = (cand, si, roomOffset) => {
-        const seatInRoom = (si % cfg.perRoom) + 1;
-        // TOP-TO-BOTTOM: col fills first, then next col
-        const col = cfg.seatDir === 'rowwise'
-          ? ((seatInRoom - 1) % cfg.cols) + 1
-          : Math.floor((seatInRoom - 1) / cfg.rows) + 1;
-        const row = cfg.seatDir === 'rowwise'
-          ? Math.floor((seatInRoom - 1) / cfg.cols) + 1
-          : ((seatInRoom - 1) % cfg.rows) + 1;
-        return {
-          roll: cand.roll, class: cand.class, name: cand.name,
-          mother: cand.mother, father: cand.father, sex: cand.sex, cat: cand.cat,
-          schoolCode: cand.schoolCode, schoolName: cand.schoolName,
-          dateSubjects: cand.dateSubjects,
-          roomNo:    roomOffset + Math.floor(si / cfg.perRoom) + 1,
-          seatInRoom, row, col,
-          seatLabel: `R${row}-C${col}`,
-          subjectsToday: (cand.dateSubjects[ds] || []).map(s => s.code + ' ' + s.name).join(' | '),
-        };
-      };
       // Respect classOrder: whichever class is "first" gets rooms 1..n
       // Group each class by subject first (serial fill within each subject)
       const rawFirst  = cfg.classOrder === 'xii-first' ? dayXII : dayX;
@@ -2190,8 +2219,8 @@ function buildSeating(candidates, cfg, targetDate) {
       const firstGroup  = groupBySubject(rawFirst);
       const secondGroup = groupBySubject(rawSecond);
       const firstRooms  = firstGroup.length ? Math.ceil(firstGroup.length / cfg.perRoom) : 0;
-      const seatedFirst  = firstGroup.map( (cand, si) => seatFn(cand, si, 0));
-      const seatedSecond = secondGroup.map((cand, si) => seatFn(cand, si, firstRooms));
+      const seatedFirst  = firstGroup.map( (cand, si) => makeSeatedEntry(cand, ds, cfg, si, 0));
+      const seatedSecond = secondGroup.map((cand, si) => makeSeatedEntry(cand, ds, cfg, si, firstRooms));
       seating[ds] = [...seatedFirst, ...seatedSecond];
       return; // skip the rest of this date's processing
     }
@@ -2232,32 +2261,7 @@ function buildSeating(candidates, cfg, targetDate) {
       ordered = groupBySubject(dayAll);
     }
 
-    const seated = ordered.map((cand, seatIdx) => {
-      const roomNo     = Math.floor(seatIdx / cfg.perRoom) + 1;
-      const seatInRoom = (seatIdx % cfg.perRoom) + 1;
-      // Seat direction: colwise = top-to-bottom (default), rowwise = left-to-right
-      const col = cfg.seatDir === 'rowwise'
-        ? ((seatInRoom - 1) % cfg.cols) + 1
-        : Math.floor((seatInRoom - 1) / cfg.rows) + 1;
-      const row = cfg.seatDir === 'rowwise'
-        ? Math.floor((seatInRoom - 1) / cfg.cols) + 1
-        : ((seatInRoom - 1) % cfg.rows) + 1;
-      return {
-        roll:         cand.roll,
-        class:        cand.class,
-        name:         cand.name,
-        mother:       cand.mother,
-        father:       cand.father,
-        sex:          cand.sex,
-        cat:          cand.cat,
-        schoolCode:   cand.schoolCode,
-        schoolName:   cand.schoolName,
-        dateSubjects: cand.dateSubjects,
-        roomNo, seatInRoom, row, col,
-        seatLabel: `R${row}-C${col}`,
-        subjectsToday: (cand.dateSubjects[ds] || []).map(s => s.code + ' ' + s.name).join(' | '),
-      };
-    });
+    const seated = ordered.map((cand, seatIdx) => makeSeatedEntry(cand, ds, cfg, seatIdx, 0));
     seating[ds] = seated;
   });
   return { seating, allDates };
