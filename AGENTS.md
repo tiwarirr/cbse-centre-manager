@@ -93,6 +93,10 @@ Date cards in Seating Plan now show:
    - added cache guard + force refresh on status toggle
 3. Current date highlight in attendance history sidebar.
 4. Date cards enhanced with class/subject counts and non-zero conditional rendering.
+5. School-wise export column mapping fixed (`Mother` and `Father` now exported in correct columns).
+6. Report/print guard helpers added:
+   - shared generated-check for report exports
+   - shared current-date+seating check for print flows
 
 ## 9) Safe Editing Guidance
 Because this is a large monolith file, prefer small targeted edits.
@@ -122,6 +126,16 @@ After any change, test:
 - No automated test suite.
 
 ## 12) Suggested Future Refactor Path
+Completed refactor phases:
+1. Phase 1: shared date/subject utilities extracted.
+2. Phase 2: persistence/state helper centralization.
+3. Phase 3: parser and seating helper extraction.
+4. Phase 4: attendance count/header helper centralization.
+5. Phase 5: date-card and candidate-list rendering helper extraction.
+6. Phase 6: report/export/print guard and context helper extraction.
+7. Phase 7: hardening pass (smoke checks + docs update + export field fix).
+
+Recommended next steps:
 1. Split into modules (`parser`, `seating`, `attendance`, `reports`, `storage`).
 2. Centralize state updates through reducer-style actions.
 3. Add unit tests for parser/seating edge cases.

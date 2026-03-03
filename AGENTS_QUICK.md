@@ -41,6 +41,11 @@
 
 ## Known Fixes
 - Candidate list `Subject(s)` no longer shows `undefined` (safe fallback from `dateSubjects`, then `—`)
+- School-wise export now maps Mother/Father columns correctly
+- Shared report/print guards prevent invalid export/print attempts consistently
+
+## Refactor Status
+- Phase 1 to Phase 7 complete (utilities, persistence, parser/seating, attendance, UI helpers, report/print guards, hardening)
 
 ## Quick Regression Checks
 - Upload+parse both classes

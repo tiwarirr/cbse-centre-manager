@@ -4357,8 +4357,45 @@ function exportAttendanceExcel() {
   XLSX.writeFile(wb, fname);
 }
 
+function getCentreMeta() {
+  return {
+    centreName: document.getElementById('cfg-centre-name').value || 'Centre',
+    centreCode: document.getElementById('cfg-centre-code').value || '',
+  };
+}
+
+function getDateSeating(ds) {
+  return (getDateState(ds).seating) || [];
+}
+
+function getSortedRoomNos(seated) {
+  return [...new Set((seated || []).map(s => s.roomNo))].sort((a,b) => a-b);
+}
+
+function requireGeneratedForReports() {
+  if (!state.generated) {
+    showModal('Not Generated', 'Generate seating plan first.');
+    return false;
+  }
+  return true;
+}
+
+function requireCurrentDateSeatingForPrint() {
+  if (!state.generated || !currentDate) {
+    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
+    return null;
+  }
+  const ds = currentDate;
+  const seated = getDateSeating(ds);
+  if (!seated.length) {
+    showModal('No Data', 'No seating data for ' + ds + '.');
+    return null;
+  }
+  return { ds, seated };
+}
+
 function exportSeatingExcel() {
-  if (!state.generated) { showModal('Not Generated', 'Generate seating plan first.'); return; }
+  if (!requireGeneratedForReports()) return;
   const cfg = getConfig();
   const headers = ['Exam Date','Day','Room No','Seat No','Row-Col','Class','Roll No','Name','Sex','Cat','School','Subject(s)'];
   const rows = [];
@@ -4374,7 +4411,7 @@ function exportSeatingExcel() {
 }
 
 function exportCandidatesExcel() {
-  if (!state.generated) { showModal('Not Generated', 'Generate seating plan first.'); return; }
+  if (!requireGeneratedForReports()) return;
   const headers = ['Class','Roll No','Name','Mother','Father','Sex','Cat','School Code','School Name','Exam Date','Room','Seat','Subject(s)'];
   const rows = [];
   state.allDates.forEach(ds => {
@@ -4388,10 +4425,9 @@ function exportCandidatesExcel() {
 }
 
 function exportSummaryExcel() {
-  if (!state.generated) { showModal('Not Generated', 'Generate seating plan first.'); return; }
+  if (!requireGeneratedForReports()) return;
   const cfg = getConfig();
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const { centreCode } = getCentreMeta();
   const wb = XLSX.utils.book_new();
 
   // ── Sheet 1: Consolidated (all classes/subjects per date) ──────
@@ -4484,13 +4520,13 @@ function exportSummaryExcel() {
 }
 
 function exportSchoolWiseExcel() {
-  if (!state.generated) { showModal('Not Generated', 'Generate seating plan first.'); return; }
+  if (!requireGeneratedForReports()) return;
   const headers = ['School Code','School Name','Class','Roll No','Name','Mother','Father','Sex','Cat','Exam Date','Room','Seat','Subject(s)'];
   const rows = [];
   Object.keys(state.schools).sort().forEach(sc => {
     state.allDates.forEach(ds => {
       (state.seating[ds]||[]).filter(s => s.schoolCode === sc).forEach(s => {
-        rows.push([s.schoolCode, s.schoolName, s.class, s.roll, s.name, s.father,
+        rows.push([s.schoolCode, s.schoolName, s.class, s.roll, s.name, s.mother, s.father,
           s.sex, s.cat, ds, `Room ${s.roomNo}`, s.seatLabel, s.subjectsToday]);
       });
     });
@@ -4500,7 +4536,7 @@ function exportSchoolWiseExcel() {
 }
 
 function exportScheduleExcel() {
-  if (!state.generated) { showModal('Not Generated', 'Generate seating plan first.'); return; }
+  if (!requireGeneratedForReports()) return;
   const headers = ['Class','Roll No','Name','Mother','Father','Sex','Cat','School','Exam Date','Day','Room','Seat','Subject(s)'];
   const rows = [];
   // Group by candidate
@@ -4778,18 +4814,11 @@ function printAppendixE(cls) {
 
 // ── SEAT SLIPS (ROOM-WISE GRID) ────────────────────────────────
 function printSeatSlips() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
-
-  const ds       = currentDate;
-  const ds_state = getDateState(ds);
-  const seated   = ds_state.seating || [];
-  if (!seated.length) { showModal('No Data', 'No seating data for ' + ds + '.'); return; }
-
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
+  const ds = ctx.ds;
+  const seated = ctx.seated;
+  const { centreName, centreCode } = getCentreMeta();
   const dateObj    = parseDate(ds);
   const dateStr    = dateObj.toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'short',year:'numeric'});
   const cfg        = getConfig();
@@ -4960,22 +4989,11 @@ function printSeatSlips() {
 
 
 function printRoomSummary() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
-
-  const ds       = currentDate;
-  const ds_state = getDateState(ds);
-  const seated   = ds_state.seating || [];
-
-  if (!seated.length) {
-    showModal('No Data', 'No seating data found for ' + ds + '.');
-    return;
-  }
-
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
+  const ds = ctx.ds;
+  const seated = ctx.seated;
+  const { centreName, centreCode } = getCentreMeta();
 
   const dateObj = parseDate(ds);
   const dateStr = dateObj.toLocaleDateString('en-IN', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
@@ -5165,14 +5183,11 @@ function printRoomSummary() {
 
 // ── CBSE-66 CENTRE MEMO ────────────────────────────────────────
 function printCentreMemo() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
-
-  const ds       = currentDate;
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
+  const ds = ctx.ds;
   const ds_state = getDateState(ds);
-  const seated   = ds_state.seating || [];
+  const seated = ctx.seated;
   const att      = ds_state.attendance || {};
 
   const anyMarked = Object.values(att).some(v => v === 'P' || v === 'A');
@@ -5181,8 +5196,7 @@ function printCentreMemo() {
     return;
   }
 
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const { centreName, centreCode } = getCentreMeta();
 
   const dateObj = parseDate(ds);
   const yyyy    = dateObj.getFullYear();
@@ -5443,14 +5457,11 @@ function printCentreMemo() {
 
 // ── FORM-66: STATEMENT OF CANDIDATES APPEARED ─────────────────
 function printForm66() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
-
-  const ds       = currentDate;
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
+  const ds = ctx.ds;
   const ds_state = getDateState(ds);
-  const seated   = ds_state.seating || [];
+  const seated = ctx.seated;
   const att      = ds_state.attendance || {};
 
   // ── 1. Check attendance is marked ──
@@ -5478,8 +5489,7 @@ function printForm66() {
     return;
   }
 
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const { centreName, centreCode } = getCentreMeta();
 
   // Format: Saturday, 21 February, 2026
   const dateObj  = parseDate(ds);
@@ -5985,18 +5995,13 @@ function printAttendanceSheet(cls) {
 
 // ── CENTURY SERIES REPORT ──────────────────────────────────────
 function printCenturySeries() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
-
-  const ds       = currentDate;
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
+  const ds = ctx.ds;
   const ds_state = getDateState(ds);
-  const seated   = ds_state.seating || [];
+  const seated = ctx.seated;
   const att      = ds_state.attendance || {};
-
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const { centreName, centreCode } = getCentreMeta();
 
   const dateObj = parseDate(ds);
   const yyyy    = dateObj.getFullYear();
@@ -6253,23 +6258,19 @@ function printCenturySeries() {
 
 // ── DISPLAY SEATING PLAN (Room Notice) ────────────────────────
 function printDisplayPlan() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
-
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
   const cfg        = getConfig();
-  const ds         = currentDate;
-  const seated     = (getDateState(ds).seating) || [];
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const ds         = ctx.ds;
+  const seated     = ctx.seated;
+  const { centreName, centreCode } = getCentreMeta();
   const dayStr     = `${dayName(ds)}, ${ds}`;
   const rows       = cfg.rows;
   const cols       = cfg.cols;
   const stagger    = cfg.stagger;
   const tPhysRows  = physRows(cfg);
   const rowH       = Math.min(32, Math.floor(178 / tPhysRows));
-  const roomNos    = [...new Set(seated.map(s => s.roomNo))].sort((a,b) => a-b);
+  const roomNos    = getSortedRoomNos(seated);
 
   // ── Inject CSS classes once ──
   const styleId = 'display-plan-style';
@@ -6524,17 +6525,14 @@ function _summaryTableHTML(headerRows, rows, grandTotal, showSubjectCol) {
 
 
 function printSeatingSummary() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
   const cfg        = getConfig();
-  const ds         = currentDate;
-  const seated     = (getDateState(ds).seating) || [];
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const ds         = ctx.ds;
+  const seated     = ctx.seated;
+  const { centreName, centreCode } = getCentreMeta();
   const dayStr     = `${dayName(ds)}, ${ds}`;
-  const roomNos    = [...new Set(seated.map(s => s.roomNo))].sort((a,b) => a-b);
+  const roomNos    = getSortedRoomNos(seated);
 
   // Build rows: for each room, for each class+subject combo — sorted room ASC, then X before XII
   let rows = '';
@@ -6590,15 +6588,12 @@ function printSeatingSummary() {
 
 // ── FORMAT 2: Per class+subject, one page each ──
 function printSeatingSubjectSummary() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
   const cfg        = getConfig();
-  const ds         = currentDate;
-  const seated     = (getDateState(ds).seating) || [];
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const ds         = ctx.ds;
+  const seated     = ctx.seated;
+  const { centreName, centreCode } = getCentreMeta();
   const dayStr     = `${dayName(ds)}, ${ds}`;
 
   // Collect all unique class+subject combos across all rooms
@@ -6708,23 +6703,19 @@ function _showSummaryOverlay(overlayId, styleId, title, pagesHTML) {
 
 // ── TRIPLICATE SEATING PLAN (Official CBSE Format) ────────────
 function printTriplicate() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
-
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
   const cfg        = getConfig();
-  const ds         = currentDate;
-  const seated     = (getDateState(ds).seating) || [];
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const ds         = ctx.ds;
+  const seated     = ctx.seated;
+  const { centreName, centreCode } = getCentreMeta();
   const dayStr     = `${dayName(ds)}, ${ds}`;
   const rows       = cfg.rows;
   const cols       = cfg.cols;
   const stagger    = cfg.stagger;
   const tPhysRows  = physRows(cfg);
   const rowH       = Math.min(22, Math.floor(170 / tPhysRows));
-  const roomNos    = [...new Set(seated.map(s => s.roomNo))].sort((a,b) => a-b);
+  const roomNos    = getSortedRoomNos(seated);
 
   // ── Inject CSS classes once ──
   const styleId = 'triplicate-print-style';
@@ -6906,15 +6897,13 @@ function printTriplicate() {
 
 
 function printSeating() {
-  if (!state.generated || !currentDate) {
-    showModal('Nothing to print', 'Generate the seating plan and select a date first.');
-    return;
-  }
-  buildPrintFrame('seating', currentDate, currentSubjectFilter);
+  const ctx = requireCurrentDateSeatingForPrint();
+  if (!ctx) return;
+  buildPrintFrame('seating', ctx.ds, currentSubjectFilter);
 }
 
 function printSummary() {
-  if (!state.generated) { showModal('Not Generated', 'Generate seating plan first.'); return; }
+  if (!requireGeneratedForReports()) return;
   buildPrintFrame('summary', null, null);
 }
 
