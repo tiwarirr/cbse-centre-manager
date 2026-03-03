@@ -37,6 +37,15 @@ Global `state` object drives everything.
 Key fields:
 - `state.candidates`: parsed canonical candidates
 - `state.allDates`: all exam dates
+- `state.answerBook`:
+  - `types[]`
+  - `subjectTypeMap{ class|subject -> typeId }`
+  - `suppClassTypeMap{ X|XII -> typeId }`
+  - `receipts[]` (challan range + qty)
+  - `receiptExceptions[]` (missing/damaged serial on receipt)
+  - `dateLedger[date]` (`assignments`, `damagedSerials`, `suppAssignments`, `suppDamagedSerials`, `remarks`)
+  - `serialRegistry{ normalizedSerial -> serial state }`
+  - `auditLog[]`
 - `state.dateStates[date]`:
   - `status`: empty/draft/locked
   - `split`, `classOrder`, `subjectOrder`
@@ -57,6 +66,12 @@ Key fields:
   - `openAttendancePanel()`
   - `renderAttendanceBody(ds)`
   - `markAtt(roll, val, ds, cls)`
+- Answer book:
+  - `renderAnswerBookSection(ds)`
+  - `addABReceipt()`, `addABReceiptException()`
+  - `assignABSerialForRoll(ds, roll, cls)`
+  - `abMarkDamagedFromAssignment(ds, roll)`
+  - `rebuildAnswerBookRegistry()`
 - Persistence:
   - `saveToBrowser()`
   - `loadFromBrowser()`
@@ -111,6 +126,30 @@ Date cards in Seating Plan now show:
    - shared current-date+seating check for print flows
 7. Session Selector added for switching saved years/centre-code sessions from UI.
 8. New-Year reset bug fix: `restoreDsFromConfig(cfg)` is now called correctly.
+9. Full Answer Book module implemented:
+   - receipt stock with serial ranges and challan qty
+   - receipt-time missing/damaged serial exceptions
+   - subject-to-type mapping
+   - date-wise candidate serial assignment
+   - absentee auto-release of assigned serials
+   - post-assignment damaged marking with override
+   - final reconciliation snapshot and 3 Excel exports
+10. Persistence upgraded:
+   - payload now stores `answerBook`
+   - payload version moved to v3 (backward-compatible load defaults)
+11. Supplementary answer-book flow added:
+   - class-based mapping (`X` and `XII` supplementary type)
+   - manual post-exam entry per candidate (0..N supplementary serials)
+   - blocked for absentees
+   - supplementary serials are consumed immediately on add
+   - supplementary damaged/override flow added
+   - exports include supplementary mapping/use/exceptions and split used totals
+12. Print blank-page hardening:
+   - added global print cleanup (`clearPrintArtifacts()`) before print flows
+   - stale overlay/style leftovers now removed before opening a new print report
+13. Seat-slip overflow fix:
+   - roll font sizing now bounded and width-aware
+   - long roll numbers no longer overflow into adjacent cells when fewer info fields are shown
 
 ## 9) Safe Editing Guidance
 Because this is a large monolith file, prefer small targeted edits.
@@ -127,17 +166,37 @@ After any change, test:
 - Upload + parse both classes
 - Generate seating all dates
 - Select date, open attendance, mark P/A
+- On attendance A mark, verify assigned answer-book serial auto-releases
+- Supplementary serial entry should block for absentees
+- Add 2 supplementary serials for one candidate and verify both persist
+- Remove one supplementary serial and verify it returns to available stock
+- Mark one supplementary serial damaged and verify blocked from reuse
 - Toggle absentees-only view
 - Hover sidebar updates correctly
 - Candidate list subject column has no `undefined`
-- One export (attendance or seating Excel)
+- Run one answer-book export (`Receipt`, `Daywise`, or `Final Return`)
+- Test print actions (`Display Plan`, `Triplicate`, `Seat Slips`) after visiting another print report first
 - Save/reload session once
+
+Answer-book focused checks:
+- Add at least one type and map class+subject to type
+- Add receipt range (e.g., `AB/26/0001` to `AB/26/0100`)
+- Mark one serial missing and one damaged on receipt
+- Assign serial to a candidate, then mark candidate absent and confirm serial is reusable
+- Configure supplementary type mapping for X and XII
+- Enter supplementary serials manually (post-exam) and verify immediate used count
+- Mark assigned serial damaged and confirm it is blocked from reuse
+- In Seat Slips, toggle off most content fields and verify roll text stays within each slip cell
+- Confirm final return report compresses remaining serials into ranges
 
 ## 11) Limitations / Technical Debt
 - Single-file architecture makes maintenance risky.
 - Many render templates are inline strings.
 - State mutations are distributed across functions.
 - No automated test suite.
+- Answer-book registry is rebuilt from receipts/ledger on render/save; large serial ranges may impact UI speed.
+- Serial parsing assumes `prefix + numeric suffix` format (alphanumeric prefix + trailing digits).
+- Print overlays/styles are dynamic; each print flow should remove its own style on close and rely on global cleanup to avoid cross-report conflicts.
 
 ## 12) Suggested Future Refactor Path
 Completed refactor phases:
