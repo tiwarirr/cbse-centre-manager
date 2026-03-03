@@ -1318,6 +1318,65 @@ function syncLegacySeating() {
   });
 }
 
+const CENTRE_INFO_RE = /CENTRE\s*-\s*(\d{5,7})\s+(.*?)\s+SCHOOL/i;
+
+function getCentreStorageKey(centreCode) {
+  return 'cbse_centre_' + (centreCode || 'default');
+}
+
+function extractCentreInfoFromHTML(html) {
+  if (!html) return null;
+  const plain = html.replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ').trim();
+  const m = plain.match(CENTRE_INFO_RE);
+  if (!m) return null;
+  const code = m[1]?.trim();
+  const name = m[2]?.trim();
+  if (!code || !name) return null;
+  return { code, name };
+}
+
+function applyCentreInfoToUI(info, opts) {
+  if (!info) return false;
+  const options = opts || {};
+  const codeEl = document.getElementById('cfg-centre-code');
+  const nameEl = document.getElementById('cfg-centre-name');
+  const sbEl   = document.getElementById('sb-centre-info');
+
+  if (codeEl && (!options.onlyIfEmpty || !codeEl.value)) codeEl.value = info.code;
+  if (nameEl && (!options.onlyIfEmpty || !nameEl.value)) nameEl.value = info.name;
+  if (sbEl && options.updateSidebar) sbEl.textContent = info.code;
+  return true;
+}
+
+function buildSlimDateStates(dateStates) {
+  const source = dateStates || {};
+  const slim = {};
+  Object.entries(source).forEach(([ds, st]) => {
+    slim[ds] = {
+      status:       st.status,
+      split:        st.split,
+      classOrder:   st.classOrder,
+      subjectOrder: st.subjectOrder,
+      lockedAt:     st.lockedAt,
+      generatedAt:  st.generatedAt,
+      attendance:   st.attendance,
+      seating: (st.seating || []).map(s => ({
+        roll:       s.roll,
+        class:      s.class,
+        name:       s.name,
+        schoolCode: s.schoolCode,
+        schoolName: s.schoolName,
+        roomNo:     s.roomNo,
+        seatInRoom: s.seatInRoom,
+        row:        s.row,
+        col:        s.col,
+        seatLabel:  s.seatLabel,
+      })),
+    };
+  });
+  return slim;
+}
+
 function saveToBrowser() {
   try {
     let centreCode = document.getElementById('cfg-centre-code')?.value || '';
@@ -1325,52 +1384,18 @@ function saveToBrowser() {
     // If fields empty but rawHTML in memory, extract now
     if ((!centreCode || !centreName) && state.rawHTML) {
       const htmlSrc = state.rawHTML['12'] || state.rawHTML['10'];
-      if (htmlSrc) {
-        const plain = htmlSrc.replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ').trim();
-        const m = plain.match(/CENTRE\s*-\s*(\d{5,7})\s+(.*?)\s+SCHOOL/i);
-        if (m) {
-          centreCode = centreCode || m[1].trim();
-          centreName = centreName || m[2].trim();
-          // Also fill the UI fields
-          const nc = document.getElementById('cfg-centre-code');
-          const nn = document.getElementById('cfg-centre-name');
-          if (nc && !nc.value) nc.value = centreCode;
-          if (nn && !nn.value) nn.value = centreName;
-        }
+      const info = extractCentreInfoFromHTML(htmlSrc);
+      if (info) {
+        centreCode = centreCode || info.code;
+        centreName = centreName || info.name;
+        applyCentreInfoToUI(info, { onlyIfEmpty: true, updateSidebar: false });
       }
     }
     // Don't save a blank session — would overwrite real saved data with empty key
     if (!centreCode && !state.candidates.length) return;
-    const key = 'cbse_centre_' + (centreCode || 'default');
+    const key = getCentreStorageKey(centreCode);
     const now = Date.now();
-
-    // Strip dateSubjects from seated objects — it's large (~16MB) and redundant
-    // (dateSubjects is rebuilt from rawHTML on load via parseHTML)
-    const slimDateStates = {};
-    Object.entries(state.dateStates).forEach(([ds, st]) => {
-      slimDateStates[ds] = {
-        status:       st.status,
-        split:        st.split,
-        classOrder:   st.classOrder,
-        subjectOrder: st.subjectOrder,
-        lockedAt:     st.lockedAt,
-        generatedAt:  st.generatedAt,
-        attendance:   st.attendance,
-        // Slim seating: only fields needed to rebuild UI (not dateSubjects)
-        seating: (st.seating || []).map(s => ({
-          roll:       s.roll,
-          class:      s.class,
-          name:       s.name,
-          schoolCode: s.schoolCode,
-          schoolName: s.schoolName,
-          roomNo:     s.roomNo,
-          seatInRoom: s.seatInRoom,
-          row:        s.row,
-          col:        s.col,
-          seatLabel:  s.seatLabel,
-        })),
-      };
-    });
+    const slimDateStates = buildSlimDateStates(state.dateStates);
 
     const payload = {
       globalCfg:    getConfig(),
@@ -1415,20 +1440,7 @@ function downloadBackup() {
     const centreCode = document.getElementById('cfg-centre-code')?.value || 'default';
     const centreName = document.getElementById('cfg-centre-name')?.value || '';
     const now = Date.now();
-    // Slim dateStates for backup (same as saveToBrowser)
-    const slimDS = {};
-    Object.entries(state.dateStates).forEach(([ds, st]) => {
-      slimDS[ds] = {
-        status: st.status, split: st.split, classOrder: st.classOrder,
-        subjectOrder: st.subjectOrder, lockedAt: st.lockedAt,
-        generatedAt: st.generatedAt, attendance: st.attendance,
-        seating: (st.seating||[]).map(s=>({
-          roll:s.roll,class:s.class,name:s.name,schoolCode:s.schoolCode,
-          schoolName:s.schoolName,roomNo:s.roomNo,seatInRoom:s.seatInRoom,
-          row:s.row,col:s.col,seatLabel:s.seatLabel,
-        })),
-      };
-    });
+    const slimDS = buildSlimDateStates(state.dateStates);
     const payload = {
       globalCfg:    getConfig(),
       centreName,
@@ -1478,7 +1490,7 @@ Saved: ${savedAt}
 This will replace all current data.`)) return;
 
       // Save to localStorage under the backup's centre code key
-      const key = 'cbse_centre_' + (payload.centreCode || 'default');
+      const key = getCentreStorageKey(payload.centreCode);
       localStorage.setItem(key, JSON.stringify(payload));
 
       // Restore config fields first so loadFromBrowser reads correct key
@@ -1522,7 +1534,7 @@ function newYearReset() {
 
   // Clear localStorage session
   try {
-    const key = 'cbse_centre_' + (centreCode || 'default');
+    const key = getCentreStorageKey(centreCode);
     localStorage.removeItem(key);
   } catch(e) {}
 
@@ -1560,8 +1572,8 @@ function fullReset() {
   // Clear localStorage
   try {
     const centreCode = document.getElementById('cfg-centre-code')?.value || 'default';
-    localStorage.removeItem('cbse_centre_' + centreCode);
-    localStorage.removeItem('cbse_centre_default');
+    localStorage.removeItem(getCentreStorageKey(centreCode));
+    localStorage.removeItem(getCentreStorageKey('default'));
   } catch(e) {}
 
   state.rawHTML    = { '10': null, '12': null };
@@ -1650,14 +1662,11 @@ function loadFromBrowser() {
         // Try v1 rawHTML extraction first
         let extracted = false;
         const htmlSrc = payload.rawHTML && (payload.rawHTML['12'] || payload.rawHTML['10']);
-        if (htmlSrc) {
-          const plain = htmlSrc.replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ').trim();
-          const m = plain.match(/CENTRE\s*-\s*(\d{5,7})\s+(.*?)\s+SCHOOL/i);
-          if (m) {
-            setVal('cfg-centre-code', m[1].trim());
-            setVal('cfg-centre-name', m[2].trim());
-            extracted = true;
-          }
+        const info = extractCentreInfoFromHTML(htmlSrc);
+        if (info) {
+          setVal('cfg-centre-code', info.code);
+          setVal('cfg-centre-name', info.name);
+          extracted = true;
         }
         // v2 fallback: try CENTRE pattern from first candidate's raw context
         // or just set whatever was saved (may be empty — user can type it in)
@@ -2328,26 +2337,8 @@ function parseAndMerge() {
     document.getElementById('badge-upload').style.display = 'none';
     document.getElementById('btn-generate').disabled = false;
 
-    // Auto-fill centre info from parsed HTML (XII preferred, fallback to X)
-    const _fillCentre = (html) => {
-      // Strip HTML tags + normalise whitespace — CBSE format is plain text in HTML table cells
-      const plain = html.replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ').trim();
-      // Exact CBSE pattern: "CENTRE - 849205 CENTRE NAME SCHOOL -XXXXX ..."
-      const m = plain.match(/CENTRE\s*-\s*(\d{5,7})\s+(.*?)\s+SCHOOL/i);
-      if (!m) return false;
-      const code = m[1].trim();
-      const name = m[2].trim();
-      if (!code || !name) return false;
-      const codeEl = document.getElementById('cfg-centre-code');
-      const nameEl = document.getElementById('cfg-centre-name');
-      const sbEl   = document.getElementById('sb-centre-info');
-      if (codeEl) codeEl.value = code;
-      if (nameEl) nameEl.value = name;
-      if (sbEl)   sbEl.textContent = code;
-      return true;
-    };
     const htmlSrc = state.rawHTML['12'] || state.rawHTML['10'];
-    if (htmlSrc) _fillCentre(htmlSrc);
+    if (htmlSrc) applyCentreInfoToUI(extractCentreInfoFromHTML(htmlSrc), { onlyIfEmpty: false, updateSidebar: true });
     // Persist immediately so it survives next session
     saveToBrowser();
 
