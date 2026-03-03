@@ -75,6 +75,18 @@ Key fields:
   - cached same-row hover to avoid unnecessary repaint
   - **forced refresh on P/A click** so sidebar status updates immediately
 
+## 6.1) Session Switching (Current Behavior)
+- Topbar includes a **Session Selector** dropdown + **Load** button.
+- Dropdown lists non-empty saved sessions from localStorage keys:
+  - `cbse_centre_<centreCode>`
+- `Load` restores the selected key directly (not only the latest autosave).
+- Selector refreshes after:
+  - save
+  - restore backup
+  - New Year reset
+  - Full reset
+  - app init/restore flow
+
 ## 7) Seating Date Cards (Current Behavior)
 Date cards in Seating Plan now show:
 - total candidates
@@ -97,6 +109,8 @@ Date cards in Seating Plan now show:
 6. Report/print guard helpers added:
    - shared generated-check for report exports
    - shared current-date+seating check for print flows
+7. Session Selector added for switching saved years/centre-code sessions from UI.
+8. New-Year reset bug fix: `restoreDsFromConfig(cfg)` is now called correctly.
 
 ## 9) Safe Editing Guidance
 Because this is a large monolith file, prefer small targeted edits.

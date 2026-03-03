@@ -643,6 +643,8 @@ tbody tr:last-child td { border-bottom: none; }
         <span style="color:#22c55e;">●</span> <span id="save-time">Saved</span>
       </span>
       <button class="btn btn-outline btn-sm" onclick="debugStorage()" title="Debug storage" style="background:#f59e0b;color:#000;border-color:#f59e0b;">🔍</button>
+      <select id="session-select" class="form-control" style="height:30px;font-size:11px;min-width:220px;" title="Load a saved session"></select>
+      <button class="btn btn-outline btn-sm" onclick="loadSelectedSession()" title="Load selected saved session">🗂️ Load</button>
       <button class="btn btn-outline btn-sm" onclick="downloadBackup()" title="Download portable backup file">⬇️ Backup</button>
       <button class="btn btn-outline btn-sm" onclick="triggerRestoreBackup()" title="Restore from backup file">📂 Restore</button>
       <input type="file" id="restore-file-input" accept=".json" style="display:none" onchange="restoreFromBackup(event)">
@@ -1377,6 +1379,90 @@ function buildSlimDateStates(dateStates) {
   return slim;
 }
 
+let _forceLoadStorageKey = null;
+
+function getSavedSessionsList() {
+  const sessions = [];
+  try {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('cbse_centre_'));
+    keys.forEach(key => {
+      try {
+        const p = JSON.parse(localStorage.getItem(key));
+        if (!p) return;
+        const isEmpty = !p.centreName && !(p.candidates && p.candidates.length) && !(p.rawHTML);
+        if (isEmpty) return;
+        sessions.push({
+          key,
+          centreCode: p.centreCode || '',
+          centreName: p.centreName || '',
+          savedAt: p.savedAt || 0,
+          candidates: p.candidates ? p.candidates.length : 0,
+        });
+      } catch(e) {}
+    });
+  } catch(e) {}
+  sessions.sort((a,b) => (b.savedAt || 0) - (a.savedAt || 0));
+  return sessions;
+}
+
+function refreshSessionSelector(selectedKey) {
+  const sel = document.getElementById('session-select');
+  if (!sel) return;
+  const sessions = getSavedSessionsList();
+  const keep = selectedKey || sel.value;
+  sel.innerHTML = '';
+
+  const head = document.createElement('option');
+  head.value = '';
+  head.textContent = sessions.length ? `Saved Sessions (${sessions.length})` : 'No Saved Sessions';
+  sel.appendChild(head);
+
+  sessions.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.key;
+    const when = s.savedAt ? new Date(s.savedAt).toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'}) : 'unknown';
+    const label = `${s.centreCode || 'default'} · ${s.centreName || 'Unnamed'} · ${s.candidates} cands · ${when}`;
+    o.textContent = label;
+    o.title = label;
+    sel.appendChild(o);
+  });
+
+  if (keep && sessions.some(s => s.key === keep)) sel.value = keep;
+  else sel.value = '';
+}
+
+function loadSelectedSession() {
+  const sel = document.getElementById('session-select');
+  if (!sel || !sel.value) {
+    showModal('Select Session', 'Please choose a saved session from the dropdown first.');
+    return;
+  }
+  const key = sel.value;
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    showModal('Not Found', 'Selected session was not found in browser storage.');
+    refreshSessionSelector();
+    return;
+  }
+  let payload = null;
+  try { payload = JSON.parse(raw); } catch(e) {}
+  const centre = payload ? (payload.centreName || payload.centreCode || 'Unknown Centre') : key;
+  const savedAt = payload && payload.savedAt ? new Date(payload.savedAt).toLocaleString('en-IN') : 'unknown';
+  if (!confirm(`Load selected session?\n\nCentre: ${centre}\nSaved: ${savedAt}\n\nCurrent unsaved context may be replaced.`)) return;
+
+  _forceLoadStorageKey = key;
+  if (loadFromBrowser()) {
+    restoreUIAfterLoad();
+    const ind = document.getElementById('save-indicator');
+    const tim = document.getElementById('save-time');
+    if (ind && tim) { tim.textContent = `Loaded session · ${savedAt}`; ind.style.display = 'flex'; }
+    refreshSessionSelector(key);
+    showModal('Session Loaded', `Loaded: ${centre}\nSaved: ${savedAt}`);
+  } else {
+    showModal('Load Failed', 'Could not load the selected session.');
+  }
+}
+
 function saveToBrowser() {
   try {
     let centreCode = document.getElementById('cfg-centre-code')?.value || '';
@@ -1420,6 +1506,7 @@ function saveToBrowser() {
       tim.textContent = `Saved ${hh}:${mm}`;
       ind.style.display = 'flex';
     }
+    refreshSessionSelector(key);
   } catch(e) {
     console.warn('Save failed:', e);
     // Show visible error — do NOT silently swallow QuotaExceededError
@@ -1504,6 +1591,7 @@ This will replace all current data.`)) return;
         const ind = document.getElementById('save-indicator');
         const tim = document.getElementById('save-time');
         if (ind && tim) { tim.textContent = `Restored from backup · ${savedAt}`; ind.style.display = 'flex'; }
+        refreshSessionSelector(key);
         showModal('Restored', `Session restored from backup.
 Centre: ${centre}
 Original save: ${savedAt}`);
@@ -1552,12 +1640,13 @@ function newYearReset() {
   setChk('cfg-show-vacant',   cfg.showVacant);
   setChk('cfg-private',       cfg.inclPrivate);
   setChk('cfg-stagger',       cfg.stagger);
-      restoreDsFromConfig(g);
+  restoreDsFromConfig(cfg);
 
   // Reset UI
   resetUIElements();
   const ind = document.getElementById('save-indicator');
   if (ind) ind.style.display = 'none';
+  refreshSessionSelector();
   showModal('New Year Ready', `Centre configuration kept:
 • ${centreName} (${centreCode})
 • ${cfg.rows} rows × ${cfg.cols} cols
@@ -1592,6 +1681,7 @@ function fullReset() {
   resetUIElements();
   const ind = document.getElementById('save-indicator');
   if (ind) ind.style.display = 'none';
+  refreshSessionSelector();
   switchPanel('upload');
 }
 
@@ -1633,15 +1723,21 @@ function loadFromBrowser() {
     // Scan all cbse_centre_* keys, pick most recently saved
     // (don't rely on UI field being populated yet — it's empty on first load)
     let raw = null;
+    if (_forceLoadStorageKey) {
+      raw = localStorage.getItem(_forceLoadStorageKey);
+      _forceLoadStorageKey = null;
+    }
     try {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('cbse_centre_'));
-      let bestTime = 0;
-      keys.forEach(k => {
-        try {
-          const p = JSON.parse(localStorage.getItem(k));
-          if (p && p.savedAt > bestTime) { bestTime = p.savedAt; raw = localStorage.getItem(k); }
-        } catch(e) {}
-      });
+      if (!raw) {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('cbse_centre_'));
+        let bestTime = 0;
+        keys.forEach(k => {
+          try {
+            const p = JSON.parse(localStorage.getItem(k));
+            if (p && p.savedAt > bestTime) { bestTime = p.savedAt; raw = localStorage.getItem(k); }
+          } catch(e) {}
+        });
+      }
     } catch(e) {}
     if (!raw) return false;
     const payload = JSON.parse(raw);
@@ -7986,6 +8082,7 @@ setTimeout(() => {
       </div>`;
     document.body.appendChild(banner);
   }
+  refreshSessionSelector();
 }, 300);
 
 
@@ -7994,6 +8091,9 @@ function doRestoreSession() {
   if (banner) banner.remove();
   if (loadFromBrowser()) {
     restoreUIAfterLoad();
+    const sel = document.getElementById('session-select');
+    if (sel && sel.value) refreshSessionSelector(sel.value);
+    else refreshSessionSelector();
     // If centre fields still empty after restore, prompt user to fill them
     const cnEl = document.getElementById('cfg-centre-name');
     const ccEl = document.getElementById('cfg-centre-code');
