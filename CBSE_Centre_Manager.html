@@ -2627,6 +2627,27 @@ function toggleLock() {
 let attendancePanelOpen = false;
 let _attSidebarKey = null;
 
+function getAttendanceCounts(dsState, seated) {
+  const total = (seated || []).length;
+  const values = Object.values(dsState?.attendance || {});
+  const attended = values.filter(v => v === 'P').length;
+  const absent   = values.filter(v => v === 'A').length;
+  const unmarked = total - attended - absent;
+  return { total, attended, absent, unmarked };
+}
+
+function attendanceSummaryHTML(counts) {
+  return `${counts.total} candidates · <span style="color:#6ee7b7;">${counts.attended} Present</span> · <span style="color:#fca5a5;">${counts.absent} Absent</span> · <span style="color:#d1d5db;">${counts.unmarked} Unmarked</span>`;
+}
+
+function refreshAttendanceModalHeader(ds) {
+  const subtitle = document.getElementById('attendance-modal-sub');
+  if (!subtitle) return;
+  const ds_state = getDateState(ds);
+  const seated = ds_state.seating || [];
+  subtitle.innerHTML = attendanceSummaryHTML(getAttendanceCounts(ds_state, seated));
+}
+
 function openAttendancePanel() {
   if (!currentDate) return;
   const ds_state = getDateState(currentDate);
@@ -2637,9 +2658,7 @@ function openAttendancePanel() {
   const existing = document.getElementById('attendance-modal');
   if (existing) existing.remove();
 
-  const attended = Object.values(ds_state.attendance).filter(v=>v==='P').length;
-  const absent   = Object.values(ds_state.attendance).filter(v=>v==='A').length;
-  const unmarked = seated.length - attended - absent;
+  const counts = getAttendanceCounts(ds_state, seated);
 
   const modal = document.createElement('div');
   modal.id = 'attendance-modal';
@@ -2650,7 +2669,7 @@ function openAttendancePanel() {
       <div style="background:#0c1c35;color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
         <div>
           <div style="font-weight:700;font-size:15px;">📋 Attendance — ${currentDate}</div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.6);margin-top:2px;">${seated.length} candidates · <span style="color:#6ee7b7;">${attended} Present</span> · <span style="color:#fca5a5;">${absent} Absent</span> · <span style="color:#d1d5db;">${unmarked} Unmarked</span></div>
+          <div id="attendance-modal-sub" style="font-size:11px;color:rgba(255,255,255,0.6);margin-top:2px;">${attendanceSummaryHTML(counts)}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <button onclick="markAllAttendance('P')" style="background:#059669;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;">✓ All Present</button>
@@ -2765,13 +2784,7 @@ function markAtt(roll, val, ds, cls) {
   ds_state.attendance[roll] = ds_state.attendance[roll] === val ? null : val;
   renderAttendanceBody(ds);
   if (cls) showAttendanceSidebar(roll, cls, true);
-  // Update header summary
-  const seated   = ds_state.seating || [];
-  const attended = Object.values(ds_state.attendance).filter(v=>v==='P').length;
-  const absent   = Object.values(ds_state.attendance).filter(v=>v==='A').length;
-  const unmarked = seated.length - attended - absent;
-  const headerSub = document.querySelector('#attendance-modal [style*="rgba(255,255,255,0.6)"]');
-  if (headerSub) headerSub.innerHTML = `${seated.length} candidates · <span style="color:#6ee7b7;">${attended} Present</span> · <span style="color:#fca5a5;">${absent} Absent</span> · <span style="color:#d1d5db;">${unmarked} Unmarked</span>`;
+  refreshAttendanceModalHeader(ds);
   // Update action bar info
   selectDate(ds);
   saveToBrowser();
@@ -2782,6 +2795,11 @@ function markAllAttendance(val) {
   const ds_state = getDateState(currentDate);
   (ds_state.seating || []).forEach(s => { ds_state.attendance[s.roll] = val; });
   renderAttendanceBody(currentDate);
+  refreshAttendanceModalHeader(currentDate);
+  if (_attSidebarKey && _attSidebarKey.includes('|')) {
+    const [roll, cls] = _attSidebarKey.split('|');
+    if (roll && cls) showAttendanceSidebar(roll, cls, true);
+  }
   selectDate(currentDate);
   saveToBrowser();
 }
