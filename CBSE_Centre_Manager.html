@@ -2900,6 +2900,41 @@ function exportAbsentList() {
 let currentDate = null;
 let currentSubjectFilter = 'all';
 
+function topSubjectCodesByClass(seated, ds, cls) {
+  const subCount = {};
+  seated.forEach(s => {
+    if (s.class !== cls) return;
+    const sub = getPrimarySubject(s, ds);
+    if (!sub || !sub.code) return;
+    subCount[sub.code] = (subCount[sub.code] || 0) + 1;
+  });
+  const entries = Object.entries(subCount);
+  if (!entries.length) return '';
+  return entries
+    .sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3)
+    .map(([code, cnt]) => `${code}(${cnt})`)
+    .join(', ');
+}
+
+function buildDateTabInfoLines(ds, seated) {
+  const xCount = seated.filter(s => s.class === 'X').length;
+  const xiiCount = seated.filter(s => s.class === 'XII').length;
+  const xCodes = topSubjectCodesByClass(seated, ds, 'X');
+  const xiiCodes = topSubjectCodesByClass(seated, ds, 'XII');
+  const classBits = [];
+  if (xCount > 0) classBits.push(`X ${xCount}`);
+  if (xiiCount > 0) classBits.push(`XII ${xiiCount}`);
+
+  const infoLines = [];
+  if (seated.length) infoLines.push(`<span class="dt-cnt">${seated.length} cands</span>`);
+  if (classBits.length) infoLines.push(`<span class="dt-cnt">${classBits.join(' · ')}</span>`);
+  if (xCodes) infoLines.push(`<span class="dt-cnt" title="Class X top subject codes: ${xCodes}">X: ${xCodes}</span>`);
+  if (xiiCodes) infoLines.push(`<span class="dt-cnt" title="Class XII top subject codes: ${xiiCodes}">XII: ${xiiCodes}</span>`);
+  if (!seated.length) infoLines.push(`<span class="dt-cnt">not generated</span>`);
+  return infoLines;
+}
+
 function buildDateTabs() {
   const container = document.getElementById('date-tabs');
   container.innerHTML = '';
@@ -2907,35 +2942,7 @@ function buildDateTabs() {
     const ds_state = getDateState(ds);
     const seated   = ds_state.seating || [];
     const statusDot = ds_state.status === 'locked' ? '🔒' : ds_state.status === 'draft' ? '●' : '○';
-    const xCount = seated.filter(s => s.class === 'X').length;
-    const xiiCount = seated.filter(s => s.class === 'XII').length;
-    const subCount = { X: {}, XII: {} };
-    seated.forEach(s => {
-      const sub = getPrimarySubject(s, ds);
-      if (!sub || !sub.code) return;
-      if (!subCount[s.class]) subCount[s.class] = {};
-      subCount[s.class][sub.code] = (subCount[s.class][sub.code] || 0) + 1;
-    });
-    const topCodes = cls => {
-      const entries = Object.entries(subCount[cls] || {});
-      if (!entries.length) return '';
-      return entries
-        .sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .slice(0, 3)
-        .map(([code, cnt]) => `${code}(${cnt})`)
-        .join(', ');
-    };
-    const xCodes = topCodes('X');
-    const xiiCodes = topCodes('XII');
-    const classBits = [];
-    if (xCount > 0) classBits.push(`X ${xCount}`);
-    if (xiiCount > 0) classBits.push(`XII ${xiiCount}`);
-    const infoLines = [];
-    if (seated.length) infoLines.push(`<span class="dt-cnt">${seated.length} cands</span>`);
-    if (classBits.length) infoLines.push(`<span class="dt-cnt">${classBits.join(' · ')}</span>`);
-    if (xCodes) infoLines.push(`<span class="dt-cnt" title="Class X top subject codes: ${xCodes}">X: ${xCodes}</span>`);
-    if (xiiCodes) infoLines.push(`<span class="dt-cnt" title="Class XII top subject codes: ${xiiCodes}">XII: ${xiiCodes}</span>`);
-    if (!seated.length) infoLines.push(`<span class="dt-cnt">not generated</span>`);
+    const infoLines = buildDateTabInfoLines(ds, seated);
     const tab = document.createElement('div');
     tab.className = 'date-tab date-tab-rich' + (i === 0 ? ' active' : '');
     tab.onclick = () => selectDate(ds);
@@ -3847,37 +3854,20 @@ function refreshAttView() {
   else if (currentAttTab === 'summary') renderAttSummary();
 }
 
-// ── TAB 1: Candidate List (existing behaviour, filter-aware) ──
-function filterCandidates() { renderAttList(); }
-function renderAttList() {
-  const f = getAttFilters();
-  const tbody = document.getElementById('candidates-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  // Filter candidateRows (existing array of per-date rows)
-  let filtered = candidateRows.filter(r =>
+function filterCandidateRows(rows, f) {
+  let filtered = rows.filter(r =>
     (!f.cls    || r.class === f.cls) &&
     (!f.search || r.roll.includes(f.search) || r.name.toLowerCase().includes(f.search)) &&
     (!f.ds     || r.date === f.ds) &&
     (!f.school || r.schoolCode === f.school)
   );
-
-  // Subject filter
   if (f.subCode) filtered = filtered.filter(r => (r.subjectsToday || '').includes(f.subCode));
-
-  // Absent only: check attendance for that date
   if (f.absentOnly) filtered = filtered.filter(r => getAttForRollDate(r.roll, r.date) === 'A');
+  return filtered;
+}
 
-  const count = document.getElementById('att-count');
-  if(count) count.textContent = filtered.length + ' rows';
-
-  filtered.slice(0, 500).forEach(s => {
-    const att = getAttForRollDate(s.roll, s.date);
-    const isA = att === 'A';
-    const tr = document.createElement('tr');
-    if (isA) tr.style.cssText = 'background:#fff5f5;';
-    tr.innerHTML = `
+function candidateRowHTML(s, att, isA) {
+  return `
       <td><span class="${s.class === 'X' ? 'cls-x' : 'cls-xii'}">${s.class}</span></td>
       <td style="font-family:'DM Mono',monospace;${isA?'color:#c00;font-weight:bold;':''}">${s.roll}</td>
       <td>${s.name}</td>
@@ -3892,6 +3882,27 @@ function renderAttList() {
       <td style="font-size:11px;font-family:'DM Mono',monospace;max-width:200px">${s.subjectsToday || '—'}</td>
       <td style="text-align:center;font-weight:bold;${isA?'color:#c00;':'color:#166534;'}">${att}</td>
     `;
+}
+
+// ── TAB 1: Candidate List (existing behaviour, filter-aware) ──
+function filterCandidates() { renderAttList(); }
+function renderAttList() {
+  const f = getAttFilters();
+  const tbody = document.getElementById('candidates-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const filtered = filterCandidateRows(candidateRows, f);
+
+  const count = document.getElementById('att-count');
+  if(count) count.textContent = filtered.length + ' rows';
+
+  filtered.slice(0, 500).forEach(s => {
+    const att = getAttForRollDate(s.roll, s.date);
+    const isA = att === 'A';
+    const tr = document.createElement('tr');
+    if (isA) tr.style.cssText = 'background:#fff5f5;';
+    tr.innerHTML = candidateRowHTML(s, att, isA);
     tbody.appendChild(tr);
   });
   if (filtered.length > 500) {
