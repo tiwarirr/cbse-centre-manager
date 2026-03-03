@@ -1922,6 +1922,23 @@ function sortDates(arr) {
   return [...arr].sort((a,b) => parseDate(a) - parseDate(b));
 }
 
+function getDateSubjects(entity, ds) {
+  return (entity?.dateSubjects?.[ds] || []).filter(Boolean);
+}
+
+function getPrimarySubject(entity, ds) {
+  return getDateSubjects(entity, ds)[0] || null;
+}
+
+function formatSubjectsForDate(entity, ds, sep) {
+  const joiner = sep || ' | ';
+  const parts = getDateSubjects(entity, ds).map(sub => {
+    if (!sub || !sub.code) return '';
+    return sub.name ? `${sub.code} ${sub.name}` : `${sub.code}`;
+  }).filter(Boolean);
+  return parts.join(joiner);
+}
+
 // ── HTML PARSER ────────────────────────────────────────────────
 // ── DATESHEET & SUBJECT CODE HELPERS ───────────────────────────
 // Returns active datesheet — stored config overrides hardcoded constants
@@ -2720,7 +2737,7 @@ function renderAttendanceBody(ds) {
 
     roomCands.forEach((s, i) => {
       const att    = ds_state.attendance[s.roll] || null;
-      const subj   = (s.dateSubjects[ds]||[])[0];
+      const subj   = getPrimarySubject(s, ds);
       const bgAlt  = i%2===0 ? '#fff' : '#f9fafb';
       const attBg  = att==='P' ? '#f0fdf4' : att==='A' ? '#fef2f2' : bgAlt;
       html += `<tr style="background:${attBg};" onmouseenter="showAttendanceSidebar('${s.roll}','${s.class}')">
@@ -2855,8 +2872,8 @@ function exportAbsentList() {
   if (!absentees.length) { alert('No absent candidates recorded.'); return; }
   let csv = 'Roll No,Name,Subject,Room,Seat\n';
   absentees.forEach(s => {
-    const subj = (s.dateSubjects[currentDate]||[])[0];
-    csv += `${s.roll},"${s.name}","${subj?subj.name:''}",${s.roomNo},${s.seatInRoom}
+    const subj = getPrimarySubject(s, currentDate);
+    csv += `${s.roll},"${s.name}","${subj ? subj.name || subj.code || '' : ''}",${s.roomNo},${s.seatInRoom}
 `;
   });
   const blob = new Blob([csv], { type:'text/csv' });
@@ -2881,7 +2898,7 @@ function buildDateTabs() {
     const xiiCount = seated.filter(s => s.class === 'XII').length;
     const subCount = { X: {}, XII: {} };
     seated.forEach(s => {
-      const sub = (s.dateSubjects?.[ds] || [])[0];
+      const sub = getPrimarySubject(s, ds);
       if (!sub || !sub.code) return;
       if (!subCount[s.class]) subCount[s.class] = {};
       subCount[s.class][sub.code] = (subCount[s.class][sub.code] || 0) + 1;
@@ -3728,18 +3745,11 @@ function buildRoomTable(allSeated, ds, cfg, subCode, subCls) {
 let candidateRows = []; // cache for filtering
 function buildCandidatesTable() {
   candidateRows = [];
-  const cfg = getConfig();
 
   state.allDates.forEach(ds => {
     const seated = state.seating[ds] || [];
     seated.forEach(s => {
-      const derivedSubjects = (s.dateSubjects?.[ds] || [])
-        .map(sub => {
-          if (!sub || !sub.code) return '';
-          return sub.name ? `${sub.code} ${sub.name}` : `${sub.code}`;
-        })
-        .filter(Boolean)
-        .join(' | ');
+      const derivedSubjects = formatSubjectsForDate(s, ds);
       const subjectsToday = (s.subjectsToday && String(s.subjectsToday).trim()) || derivedSubjects || '—';
       candidateRows.push({ ...s, date: ds, subjectsToday });
     });
@@ -7320,12 +7330,7 @@ function renderDsTable(cls) {
   const container = document.getElementById(`ds-table-${cls}`);
   if (!container) return;
 
-  const rows = Object.entries(data).sort(([a],[b]) => {
-    // Sort by date — parse DD-Mon-YYYY
-    const months = {Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
-    const parse = d => { const [dd,mon,yyyy] = d.split('-'); return new Date(yyyy, (months[mon]||1)-1, dd); };
-    return parse(a) - parse(b);
-  });
+  const rows = Object.entries(data).sort(([a],[b]) => parseDate(a) - parseDate(b));
 
   container.innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:11px;">
