@@ -150,6 +150,13 @@ Date cards in Seating Plan now show:
 13. Seat-slip overflow fix:
    - roll font sizing now bounded and width-aware
    - long roll numbers no longer overflow into adjacent cells when fewer info fields are shown
+14. Print runtime centralization:
+   - added `PRINT_REPORT_REGISTRY` (overlay/style/page metadata)
+   - added shared helpers: `beginPrintSession()`, `endPrintSession()`, `buildPrintShellCSS()`, `registerPrintHooks()`
+   - close buttons now call `closePrintSession(...)` instead of direct DOM removal
+15. QP print hook lifecycle unified:
+   - QP Statement and Bank QP Register now use centralized hook registration/teardown
+   - stale `beforeprint/afterprint` listeners are removed by shared runtime cleanup
 
 ## 9) Safe Editing Guidance
 Because this is a large monolith file, prefer small targeted edits.
@@ -176,6 +183,10 @@ After any change, test:
 - Candidate list subject column has no `undefined`
 - Run one answer-book export (`Receipt`, `Daywise`, or `Final Return`)
 - Test print actions (`Display Plan`, `Triplicate`, `Seat Slips`) after visiting another print report first
+- Run print previews sequentially without refresh:
+  - `Display Plan` -> `Triplicate` -> `Seat Slips` -> `Room Summary` -> `Centre Memo` -> `Form-66`
+  - `Att. Sheet (X/XII)` -> `Appendix-E (X/XII)` -> `Century Series` -> `QP Statement` -> `Bank QP Register`
+  - expected: no blank preview, no stale toolbar/style contamination, close button always cleans overlay/style
 - Save/reload session once
 
 Answer-book focused checks:
@@ -196,7 +207,10 @@ Answer-book focused checks:
 - No automated test suite.
 - Answer-book registry is rebuilt from receipts/ledger on render/save; large serial ranges may impact UI speed.
 - Serial parsing assumes `prefix + numeric suffix` format (alphanumeric prefix + trailing digits).
-- Print overlays/styles are dynamic; each print flow should remove its own style on close and rely on global cleanup to avoid cross-report conflicts.
+- Print overlays/styles are dynamic and now routed through shared runtime metadata; new print flows should:
+  - register overlay/style IDs in `PRINT_REPORT_REGISTRY`
+  - use `buildPrintShellCSS()` for common print-shell behavior
+  - close through `closePrintSession(...)` to avoid hook/style leaks
 
 ## 12) Suggested Future Refactor Path
 Completed refactor phases:

@@ -4733,31 +4733,128 @@ function exportScheduleExcel() {
 }
 
 // ── PRINT ──────────────────────────────────────────────────────
+const PRINT_REPORT_REGISTRY = {
+  appendixX:      { overlayId: 'appendixe-overlay-X',   styleId: 'appendixe-style-X',   pageSize: 'A4', orientation: 'portrait',  margins: '14mm 16mm 14mm 16mm' },
+  appendixXII:    { overlayId: 'appendixe-overlay-XII', styleId: 'appendixe-style-XII', pageSize: 'A4', orientation: 'portrait',  margins: '14mm 16mm 14mm 16mm' },
+  slips:          { overlayId: 'slips-overlay',         styleId: 'slips-print-style',   pageSize: 'A4', orientation: 'landscape', margins: '7mm 8mm 7mm 8mm' },
+  roomSummary:    { overlayId: 'summary-overlay',       styleId: 'summary-print-style', pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
+  centreMemo:     { overlayId: 'memo-overlay',          styleId: 'memo-print-style',    pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
+  form66:         { overlayId: 'form66-overlay',        styleId: 'form66-print-style',  pageSize: 'A4', orientation: 'portrait',  margins: '8mm 10mm 8mm 10mm' },
+  attendanceX:    { overlayId: 'attsheet-overlay-X',    styleId: 'attsheet-style-X',    pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
+  attendanceXII:  { overlayId: 'attsheet-overlay-XII',  styleId: 'attsheet-style-XII',  pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
+  century:        { overlayId: 'century-overlay',       styleId: 'century-print-style', pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
+  displayPlan:    { overlayId: 'display-plan-overlay',  styleId: 'display-plan-style',  pageSize: 'A4', orientation: 'portrait',  margins: '8mm 10mm 8mm 10mm' },
+  triplicate:     { overlayId: 'triplicate-overlay',    styleId: 'triplicate-print-style', pageSize: 'A4', orientation: 'portrait', margins: '8mm 12mm 8mm 12mm' },
+  qpStatement:    { overlayId: 'qp-stmt-overlay',       styleId: 'qp-stmt-style',       pageSize: 'A4', orientation: 'portrait',  margins: '20mm' },
+  qpRegister:     { overlayId: 'qp-reg-overlay',        styleId: 'qp-reg-style',        pageSize: 'A4', orientation: 'landscape', margins: '10mm 12mm' },
+};
+
+const PRINT_RUNTIME = {
+  active: null,
+  hooks: {},
+  debug: false,
+};
+
+function _printDebug(msg, payload) {
+  if (!(PRINT_RUNTIME.debug || window.__PRINT_DEBUG__)) return;
+  console.log('[print-runtime]', msg, payload || '');
+}
+
+function buildPrintShellCSS({ overlayId, pageSize, orientation, margins }) {
+  return `
+    @media print {
+      body > *:not(#${overlayId}) { display:none!important; }
+      #${overlayId} .no-print { display:none!important; }
+      #${overlayId} {
+        position:static!important;
+        background:#fff!important;
+        overflow:visible!important;
+        -webkit-print-color-adjust:exact;
+        print-color-adjust:exact;
+      }
+      @page { size:${pageSize || 'A4'} ${orientation || 'portrait'}; margin:${margins || '10mm'}; }
+      thead { display:table-header-group; }
+      tfoot { display:table-row-group; }
+      tr, td, th { page-break-inside:avoid; }
+    }`;
+}
+
+function registerPrintHooks(reportKey, before, after) {
+  const key = String(reportKey || '');
+  const prev = PRINT_RUNTIME.hooks[key];
+  if (prev?.before) window.removeEventListener('beforeprint', prev.before);
+  if (prev?.after) window.removeEventListener('afterprint', prev.after);
+  if (typeof before === 'function') window.addEventListener('beforeprint', before);
+  if (typeof after === 'function') window.addEventListener('afterprint', after);
+  PRINT_RUNTIME.hooks[key] = {
+    before: typeof before === 'function' ? before : null,
+    after: typeof after === 'function' ? after : null,
+  };
+  _printDebug('register-hooks', { reportKey: key, hasBefore: !!before, hasAfter: !!after });
+}
+
+function clearPrintHooks(reportKey) {
+  if (reportKey) {
+    const key = String(reportKey);
+    const h = PRINT_RUNTIME.hooks[key];
+    if (h?.before) window.removeEventListener('beforeprint', h.before);
+    if (h?.after) window.removeEventListener('afterprint', h.after);
+    delete PRINT_RUNTIME.hooks[key];
+    return;
+  }
+  Object.keys(PRINT_RUNTIME.hooks).forEach(key => clearPrintHooks(key));
+}
+
+function beginPrintSession({ reportKey, overlayId, styleId, pageSize, orientation, margins, beforePrint, afterPrint } = {}) {
+  const meta = PRINT_REPORT_REGISTRY[reportKey] || {};
+  const resolved = {
+    reportKey: reportKey || 'custom',
+    overlayId: overlayId || meta.overlayId,
+    styleId: styleId || meta.styleId,
+    pageSize: pageSize || meta.pageSize || 'A4',
+    orientation: orientation || meta.orientation || 'portrait',
+    margins: margins || meta.margins || '10mm',
+  };
+  if (!resolved.overlayId || !resolved.styleId) return resolved;
+  clearPrintArtifacts();
+  document.getElementById(resolved.overlayId)?.remove();
+  document.getElementById(resolved.styleId)?.remove();
+  if (beforePrint || afterPrint) registerPrintHooks(resolved.reportKey, beforePrint, afterPrint);
+  PRINT_RUNTIME.active = resolved;
+  _printDebug('begin-session', resolved);
+  return resolved;
+}
+
+function endPrintSession({ reportKey, overlayId, styleId } = {}) {
+  const active = PRINT_RUNTIME.active || {};
+  const meta = PRINT_REPORT_REGISTRY[reportKey] || {};
+  const oid = overlayId || active.overlayId || meta.overlayId;
+  const sid = styleId || active.styleId || meta.styleId;
+  const key = reportKey || active.reportKey;
+  if (oid) document.getElementById(oid)?.remove();
+  if (sid) document.getElementById(sid)?.remove();
+  if (key) clearPrintHooks(key);
+  if (PRINT_RUNTIME.active && ((!oid || PRINT_RUNTIME.active.overlayId === oid) || (!sid || PRINT_RUNTIME.active.styleId === sid))) {
+    PRINT_RUNTIME.active = null;
+  }
+  _printDebug('end-session', { reportKey: key, overlayId: oid, styleId: sid });
+}
+
+function closePrintSession(reportKey, overlayId, styleId) {
+  endPrintSession({ reportKey, overlayId, styleId });
+}
+
 function clearPrintArtifacts() {
-  const overlayIds = [
-    'appendixe-overlay-X', 'appendixe-overlay-XII',
-    'slips-overlay', 'summary-overlay', 'memo-overlay', 'form66-overlay',
-    'attsheet-overlay-X', 'attsheet-overlay-XII',
-    'century-overlay', 'display-plan-overlay', 'triplicate-overlay',
-    'qp-stmt-overlay', 'qp-reg-overlay'
-  ];
-  const styleIds = [
-    'appendixe-style-X', 'appendixe-style-XII',
-    'slips-print-style', 'summary-print-style', 'memo-print-style', 'form66-print-style',
-    'attsheet-style-X', 'attsheet-style-XII',
-    'century-print-style', 'display-plan-style', 'triplicate-print-style',
-    'qp-stmt-style', 'qp-reg-style'
-  ];
+  const overlayIds = [...new Set(Object.values(PRINT_REPORT_REGISTRY).map(x => x.overlayId).filter(Boolean))];
+  const styleIds = [...new Set(Object.values(PRINT_REPORT_REGISTRY).map(x => x.styleId).filter(Boolean))];
   overlayIds.forEach(id => document.getElementById(id)?.remove());
   styleIds.forEach(id => document.getElementById(id)?.remove());
-  if (window._qpStmtBeforePrint) window.removeEventListener('beforeprint', window._qpStmtBeforePrint);
-  if (window._qpStmtAfterPrint) window.removeEventListener('afterprint', window._qpStmtAfterPrint);
-  if (window._qpRegBeforePrint) window.removeEventListener('beforeprint', window._qpRegBeforePrint);
-  if (window._qpRegAfterPrint) window.removeEventListener('afterprint', window._qpRegAfterPrint);
+  clearPrintHooks();
+  PRINT_RUNTIME.active = null;
+  _printDebug('clear-artifacts', { overlayCount: overlayIds.length, styleCount: styleIds.length });
 }
 // ── APPENDIX-E: CONSOLIDATED ABSENTEE STATEMENT ───────────────
 function printAppendixE(cls) {
-  clearPrintArtifacts();
   // cls = 'X' or 'XII'
   if (!state.candidates || !state.candidates.length) {
     showModal('No Data', 'Please load candidate data first.');
@@ -4963,26 +5060,26 @@ function printAppendixE(cls) {
 
   </div>`;
 
+  const session = beginPrintSession({ reportKey: cls === 'XII' ? 'appendixXII' : 'appendixX' });
   // ── Render overlay ──
-  const overlayId = 'appendixe-overlay-' + cls;
+  const overlayId = session.overlayId;
   let overlay = document.getElementById(overlayId);
   if (overlay) overlay.remove();
-  const styleId = 'appendixe-style-' + cls;
+  const styleId = session.styleId;
   let pStyle = document.getElementById(styleId);
   if (pStyle) pStyle.remove();
 
   const style = document.createElement('style');
   style.id = styleId;
-  style.textContent = `
-    @media print {
-      body > *:not(#${overlayId}) { display:none!important; }
-      #${overlayId} .no-print { display:none!important; }
-      #${overlayId} { position:static!important; background:#fff!important; overflow:visible!important; }
-      @page { size:A4 portrait; margin:14mm 16mm 14mm 16mm; }
-      .appendix-page table thead th {
-        background:#fff!important; color:#000!important;
-        -webkit-print-color-adjust:exact; print-color-adjust:exact;
-      }
+  style.textContent = `${buildPrintShellCSS({
+    overlayId,
+    pageSize: session.pageSize,
+    orientation: session.orientation,
+    margins: session.margins
+  })}
+    .appendix-page table thead th {
+      background:#fff!important; color:#000!important;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
     }`;
   document.head.appendChild(style);
 
@@ -4999,7 +5096,7 @@ function printAppendixE(cls) {
           border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">
           🖨️ Print / Save PDF
         </button>
-        <button onclick="document.getElementById('${overlayId}').remove();document.getElementById('${styleId}').remove();"
+        <button onclick="closePrintSession('${session.reportKey}','${overlayId}','${styleId}')"
           style="background:#6b7280;color:#fff;border:none;border-radius:5px;
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
@@ -5011,7 +5108,6 @@ function printAppendixE(cls) {
 
 // ── SEAT SLIPS (ROOM-WISE GRID) ────────────────────────────────
 function printSeatSlips() {
-  clearPrintArtifacts();
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const ds = ctx.ds;
@@ -5139,26 +5235,28 @@ function printSeatSlips() {
   }
 
   // ── Overlay ──
-  let overlay = document.getElementById('slips-overlay');
+  const session = beginPrintSession({ reportKey: 'slips' });
+  const overlayId = session.overlayId;
+  const styleId = session.styleId;
+  let overlay = document.getElementById(overlayId);
   if (overlay) overlay.remove();
 
   const style = document.createElement('style');
-  style.id = 'slips-print-style';
-  document.getElementById('slips-print-style')?.remove();
-  style.textContent = `
-    @media print {
-      body > *:not(#slips-overlay) { display:none!important; }
-      #slips-overlay .no-print { display:none!important; }
-      #slips-overlay { position:static!important;background:#fff!important;overflow:visible!important; }
-      @page { size:A4 landscape; margin:5mm 6mm 5mm 6mm; }
-      .slip-page { page-break-after:always;height:auto!important;width:auto!important; }
-      .slip-page:last-child { page-break-after:avoid; }
-      .slip-page table td { -webkit-print-color-adjust:exact;print-color-adjust:exact; }
-    }`;
+  style.id = styleId;
+  document.getElementById(styleId)?.remove();
+  style.textContent = `${buildPrintShellCSS({
+    overlayId,
+    pageSize: session.pageSize,
+    orientation: session.orientation,
+    margins: session.margins
+  })}
+    .slip-page { page-break-after:always;height:auto!important;width:auto!important; }
+    .slip-page:last-child { page-break-after:avoid; }
+    .slip-page table td { -webkit-print-color-adjust:exact;print-color-adjust:exact; }`;
   document.head.appendChild(style);
 
   overlay = document.createElement('div');
-  overlay.id = 'slips-overlay';
+  overlay.id = overlayId;
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
 
   // Checkbox helper
@@ -5183,7 +5281,7 @@ function printSeatSlips() {
           ${chk('slip-opt-seat',    'Seat Lbl',true)}
         </div>
         <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">🖨️ Print / Save PDF</button>
-        <button onclick="document.getElementById('slips-overlay').remove();document.getElementById('slips-print-style').remove();" style="background:#6b7280;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+        <button onclick="closePrintSession('${session.reportKey}','${overlayId}','${styleId}')" style="background:#6b7280;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
     <div style="padding:20px;display:flex;flex-direction:column;gap:20px;" id="slips-pages">${buildPages(getOpts())}</div>`;
@@ -5197,7 +5295,7 @@ function printSeatSlips() {
 
 
 function printRoomSummary() {
-  clearPrintArtifacts();
+  beginPrintSession({ reportKey: 'roomSummary' });
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const ds = ctx.ds;
@@ -5352,19 +5450,18 @@ function printRoomSummary() {
   if (overlay) overlay.remove();
   const style = document.createElement('style');
   style.id = 'summary-print-style';
-  style.textContent = `
-    @media print {
-      body > *:not(#summary-overlay) { display:none!important; }
-      #summary-overlay .no-print { display:none!important; }
-      #summary-overlay { position:static!important; background:#fff!important; overflow:visible!important; }
-      @page { size:A4 portrait; margin:12mm 14mm 12mm 14mm; }
-      .summary-table thead { display:table-header-group; }
-      .summary-table thead th {
-        background:#fff!important; color:#000!important;
-        -webkit-print-color-adjust:exact; print-color-adjust:exact;
-      }
-      .summary-table tbody tr { page-break-inside:avoid; }
-    }`;
+  style.textContent = `${buildPrintShellCSS({
+      overlayId: 'summary-overlay',
+      pageSize: 'A4',
+      orientation: 'portrait',
+      margins: '12mm 14mm 12mm 14mm'
+    })}
+    .summary-table thead { display:table-header-group; }
+    .summary-table thead th {
+      background:#fff!important; color:#000!important;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    .summary-table tbody tr { page-break-inside:avoid; }`;
   document.head.appendChild(style);
 
   overlay = document.createElement('div');
@@ -5380,7 +5477,7 @@ function printRoomSummary() {
           border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">
           🖨️ Print / Save PDF
         </button>
-        <button onclick="document.getElementById('summary-overlay').remove();document.getElementById('summary-print-style').remove();"
+        <button onclick="closePrintSession('roomSummary','summary-overlay','summary-print-style')"
           style="background:#6b7280;color:#fff;border:none;border-radius:5px;
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
@@ -5392,7 +5489,7 @@ function printRoomSummary() {
 
 // ── CBSE-66 CENTRE MEMO ────────────────────────────────────────
 function printCentreMemo() {
-  clearPrintArtifacts();
+  beginPrintSession({ reportKey: 'centreMemo' });
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const ds = ctx.ds;
@@ -5630,15 +5727,14 @@ function printCentreMemo() {
   if (overlay) overlay.remove();
   const style = document.createElement('style');
   style.id = 'memo-print-style';
-  style.textContent = `
-    @media print {
-      body > *:not(#memo-overlay) { display:none!important; }
-      #memo-overlay .no-print { display:none!important; }
-      #memo-overlay { position:static!important; background:#fff!important; overflow:visible!important; }
-      @page { size:A4 landscape; margin:6mm 8mm 6mm 8mm; }
-      .memo-page { page-break-after:always; }
-      .memo-page:last-child { page-break-after:avoid; }
-    }`;
+  style.textContent = `${buildPrintShellCSS({
+      overlayId: 'memo-overlay',
+      pageSize: 'A4',
+      orientation: 'landscape',
+      margins: '6mm 8mm 6mm 8mm'
+    })}
+    .memo-page { page-break-after:always; }
+    .memo-page:last-child { page-break-after:avoid; }`;
   document.head.appendChild(style);
 
   overlay = document.createElement('div');
@@ -5654,7 +5750,7 @@ function printCentreMemo() {
           border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">
           🖨️ Print / Save PDF
         </button>
-        <button onclick="document.getElementById('memo-overlay').remove();document.getElementById('memo-print-style').remove();"
+        <button onclick="closePrintSession('centreMemo','memo-overlay','memo-print-style')"
           style="background:#6b7280;color:#fff;border:none;border-radius:5px;
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
@@ -5667,7 +5763,7 @@ function printCentreMemo() {
 
 // ── FORM-66: STATEMENT OF CANDIDATES APPEARED ─────────────────
 function printForm66() {
-  clearPrintArtifacts();
+  beginPrintSession({ reportKey: 'form66' });
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const ds = ctx.ds;
@@ -5953,22 +6049,21 @@ function printForm66() {
   if (overlay) overlay.remove();
   const style = document.createElement('style');
   style.id = 'form66-print-style';
-  style.textContent = `
-    @media print {
-      body > *:not(#form66-overlay) { display:none!important; }
-      #form66-overlay .no-print { display:none!important; }
-      #form66-overlay { position:static!important; background:#fff!important; overflow:visible!important; }
-      @page { size:A4 portrait; margin:12mm 14mm 12mm 14mm; }
-      .form66-page { page-break-after:always; min-height:auto; }
-      .form66-page:last-child { page-break-after:avoid; }
-      .form66-page table thead tr,
-      .form66-page table thead th,
-      .form66-page table thead td {
-        background:#fff!important;
-        -webkit-print-color-adjust:exact;
-        print-color-adjust:exact;
-        color:#000!important;
-      }
+  style.textContent = `${buildPrintShellCSS({
+      overlayId: 'form66-overlay',
+      pageSize: 'A4',
+      orientation: 'portrait',
+      margins: '12mm 14mm 12mm 14mm'
+    })}
+    .form66-page { page-break-after:always; min-height:auto; }
+    .form66-page:last-child { page-break-after:avoid; }
+    .form66-page table thead tr,
+    .form66-page table thead th,
+    .form66-page table thead td {
+      background:#fff!important;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+      color:#000!important;
     }`;
   document.head.appendChild(style);
 
@@ -5985,7 +6080,7 @@ function printForm66() {
           border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">
           🖨️ Print / Save PDF
         </button>
-        <button onclick="document.getElementById('form66-overlay').remove();document.getElementById('form66-print-style').remove();"
+        <button onclick="closePrintSession('form66','form66-overlay','form66-print-style')"
           style="background:#6b7280;color:#fff;border:none;border-radius:5px;
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
@@ -5997,7 +6092,7 @@ function printForm66() {
 
 // ── CONSOLIDATED ATTENDANCE SHEET ─────────────────────────────
 function printAttendanceSheet(cls) {
-  clearPrintArtifacts();
+  beginPrintSession({ reportKey: cls === 'XII' ? 'attendanceXII' : 'attendanceX' });
   if (!state.candidates || !state.candidates.length) {
     showModal('No Data', 'Please load candidate data first.'); return;
   }
@@ -6163,22 +6258,21 @@ function printAttendanceSheet(cls) {
 
   const style = document.createElement('style');
   style.id = styleId;
-  style.textContent = `
-    @media print {
-      body > *:not(#${overlayId}) { display:none!important; }
-      #${overlayId} .no-print { display:none!important; }
-      #${overlayId} { position:static!important; background:#fff!important; overflow:visible!important; }
-      @page { size:A4 landscape; margin:6mm 8mm 6mm 8mm; }
-      .att-page { page-break-after:always; padding:0!important; }
-      .att-page:last-child { page-break-after:avoid; }
-      .att-page table thead { display:table-header-group; }
-      .att-page table thead th {
-        background:#f0f0f0!important;color:#000!important;
-        -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
-      }
-      .att-page table td, .att-page table th {
-        -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
-      }
+  style.textContent = `${buildPrintShellCSS({
+      overlayId,
+      pageSize: 'A4',
+      orientation: 'landscape',
+      margins: '6mm 8mm 6mm 8mm'
+    })}
+    .att-page { page-break-after:always; padding:0!important; }
+    .att-page:last-child { page-break-after:avoid; }
+    .att-page table thead { display:table-header-group; }
+    .att-page table thead th {
+      background:#f0f0f0!important;color:#000!important;
+      -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
+    }
+    .att-page table td, .att-page table th {
+      -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
     }`;
   document.head.appendChild(style);
 
@@ -6195,7 +6289,7 @@ function printAttendanceSheet(cls) {
           border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">
           🖨️ Print / Save PDF
         </button>
-        <button onclick="document.getElementById('${overlayId}').remove();document.getElementById('${styleId}').remove();"
+        <button onclick="closePrintSession('${cls==='XII'?'attendanceXII':'attendanceX'}','${overlayId}','${styleId}')"
           style="background:#6b7280;color:#fff;border:none;border-radius:5px;
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
@@ -6207,7 +6301,7 @@ function printAttendanceSheet(cls) {
 
 // ── CENTURY SERIES REPORT ──────────────────────────────────────
 function printCenturySeries() {
-  clearPrintArtifacts();
+  beginPrintSession({ reportKey: 'century' });
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const ds = ctx.ds;
@@ -6430,20 +6524,19 @@ function printCenturySeries() {
   if (overlay) overlay.remove();
   const style = document.createElement('style');
   style.id = 'century-print-style';
-  style.textContent = `
-    @media print {
-      body > *:not(#century-overlay) { display:none!important; }
-      #century-overlay .no-print { display:none!important; }
-      #century-overlay { position:static!important; background:#fff!important; overflow:visible!important; }
-      @page { size:A4 portrait; margin:12mm 14mm 12mm 14mm; }
-      .century-page { page-break-after:always; }
-      .century-page:last-child { page-break-after:avoid; }
-      .century-page table thead th {
-        background:#fff!important; color:#000!important;
-        -webkit-print-color-adjust:exact; print-color-adjust:exact;
-      }
-      .century-page tr { page-break-inside:avoid; }
-    }`;
+  style.textContent = `${buildPrintShellCSS({
+      overlayId: 'century-overlay',
+      pageSize: 'A4',
+      orientation: 'portrait',
+      margins: '12mm 14mm 12mm 14mm'
+    })}
+    .century-page { page-break-after:always; }
+    .century-page:last-child { page-break-after:avoid; }
+    .century-page table thead th {
+      background:#fff!important; color:#000!important;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    .century-page tr { page-break-inside:avoid; }`;
   document.head.appendChild(style);
 
   overlay = document.createElement('div');
@@ -6459,7 +6552,7 @@ function printCenturySeries() {
           border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">
           🖨️ Print / Save PDF
         </button>
-        <button onclick="document.getElementById('century-overlay').remove();document.getElementById('century-print-style').remove();"
+        <button onclick="closePrintSession('century','century-overlay','century-print-style')"
           style="background:#6b7280;color:#fff;border:none;border-radius:5px;
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
@@ -6471,7 +6564,7 @@ function printCenturySeries() {
 
 // ── DISPLAY SEATING PLAN (Room Notice) ────────────────────────
 function printDisplayPlan() {
-  clearPrintArtifacts();
+  beginPrintSession({ reportKey: 'displayPlan' });
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const cfg        = getConfig();
@@ -6491,18 +6584,17 @@ function printDisplayPlan() {
   document.getElementById(styleId)?.remove();
   const style = document.createElement('style');
   style.id = styleId;
-  style.textContent = `
-    @media print {
-      body > *:not(#display-plan-overlay) { display:none!important; }
-      #display-plan-overlay .no-print    { display:none!important; }
-      #display-plan-overlay { position:static!important;background:#fff!important;overflow:visible!important; }
-      @page { size:A4 portrait; margin:15mm; }
+  style.textContent = `${buildPrintShellCSS({
+      overlayId: 'display-plan-overlay',
+      pageSize: 'A4',
+      orientation: 'portrait',
+      margins: '15mm'
+    })}
       .dp { page-break-after:always; }
       .dp:last-child { page-break-after:avoid; }
       .dp-xcell, .dp-roll, .dp-vacant, .dp-colh {
         -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
       }
-    }
     .dp { width:180mm;margin:0 auto;font-family:Arial,sans-serif;box-sizing:border-box; }
     .dp-grid  { width:100%;border-collapse:collapse;table-layout:fixed; }
     .dp-colh  { border:1.5px solid #000;padding:6px 4px;text-align:center;
@@ -6541,7 +6633,7 @@ function printDisplayPlan() {
     <div style="display:flex;gap:10px;">
       <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;
         border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">🖨️ Print / Save PDF</button>
-      <button onclick="document.getElementById('display-plan-overlay').remove();document.getElementById('display-plan-style').remove();"
+      <button onclick="closePrintSession('displayPlan','display-plan-overlay','display-plan-style')"
         style="background:#6b7280;color:#fff;border:none;border-radius:5px;
         padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
     </div>`;
@@ -6739,7 +6831,6 @@ function _summaryTableHTML(headerRows, rows, grandTotal, showSubjectCol) {
 
 
 function printSeatingSummary() {
-  clearPrintArtifacts();
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const cfg        = getConfig();
@@ -6803,7 +6894,6 @@ function printSeatingSummary() {
 
 // ── FORMAT 2: Per class+subject, one page each ──
 function printSeatingSubjectSummary() {
-  clearPrintArtifacts();
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const cfg        = getConfig();
@@ -6872,20 +6962,26 @@ function _summaryFooter() {
 }
 
 function _showSummaryOverlay(overlayId, styleId, title, pagesHTML) {
+  const session = beginPrintSession({
+    reportKey: 'roomSummary',
+    overlayId,
+    styleId,
+    pageSize: 'A4',
+    orientation: 'portrait',
+    margins: '10mm'
+  });
   document.getElementById(styleId)?.remove();
   const style = document.createElement('style');
   style.id = styleId;
-  style.textContent = `
-    @media print {
-      body > *:not(#${overlayId}) { display:none!important; }
-      #${overlayId} .no-print     { display:none!important; }
-      #${overlayId} { position:static!important;background:#fff!important;overflow:visible!important; }
-      @page { size:A4 portrait; margin:10mm; }
-      .sp-sum { page-break-after:always; }
-      .sp-sum:last-child { page-break-after:avoid; }
-      .sp-sum table { -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important; }
-
-    }
+  style.textContent = `${buildPrintShellCSS({
+      overlayId,
+      pageSize: session.pageSize,
+      orientation: session.orientation,
+      margins: session.margins
+    })}
+    .sp-sum { page-break-after:always; }
+    .sp-sum:last-child { page-break-after:avoid; }
+    .sp-sum table { -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important; }
     .sp-sum { width:190mm;margin:0 auto;font-family:Arial,sans-serif;box-sizing:border-box; }
   `;
   document.head.appendChild(style);
@@ -6904,7 +7000,7 @@ function _showSummaryOverlay(overlayId, styleId, title, pagesHTML) {
     <div style="display:flex;gap:10px;">
       <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;
         border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">🖨️ Print / Save PDF</button>
-      <button onclick="document.getElementById('${overlayId}').remove();document.getElementById('${styleId}').remove();"
+      <button onclick="closePrintSession('${session.reportKey}','${overlayId}','${styleId}')"
         style="background:#6b7280;color:#fff;border:none;border-radius:5px;
         padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
     </div>`;
@@ -6919,7 +7015,7 @@ function _showSummaryOverlay(overlayId, styleId, title, pagesHTML) {
 
 // ── TRIPLICATE SEATING PLAN (Official CBSE Format) ────────────
 function printTriplicate() {
-  clearPrintArtifacts();
+  beginPrintSession({ reportKey: 'triplicate' });
   const ctx = requireCurrentDateSeatingForPrint();
   if (!ctx) return;
   const cfg        = getConfig();
@@ -6939,15 +7035,14 @@ function printTriplicate() {
   document.getElementById(styleId)?.remove();
   const style = document.createElement('style');
   style.id = styleId;
-  style.textContent = `
-    @media print {
-      body > *:not(#triplicate-overlay) { display:none!important; }
-      #triplicate-overlay .no-print    { display:none!important; }
-      #triplicate-overlay { position:static!important;background:#fff!important;overflow:visible!important; }
-      @page { size:A4 portrait; margin:8mm 12mm 8mm 12mm; }
-      .tp { page-break-after:always; }
-      .tp:last-child { page-break-after:avoid; }
-    }
+  style.textContent = `${buildPrintShellCSS({
+      overlayId: 'triplicate-overlay',
+      pageSize: 'A4',
+      orientation: 'portrait',
+      margins: '8mm 12mm 8mm 12mm'
+    })}
+    .tp { page-break-after:always; }
+    .tp:last-child { page-break-after:avoid; }
     .tp { width:190mm;height:281mm;margin:0 auto;font-family:Arial,sans-serif;
           display:flex;flex-direction:column;justify-content:space-between;padding:3mm 0; }
     .tp table { border-collapse:collapse; }
@@ -6984,7 +7079,7 @@ function printTriplicate() {
     <div style="display:flex;gap:10px;">
       <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;
         border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">🖨️ Print / Save PDF</button>
-      <button onclick="document.getElementById('triplicate-overlay').remove();document.getElementById('triplicate-print-style').remove();"
+      <button onclick="closePrintSession('triplicate','triplicate-overlay','triplicate-print-style')"
         style="background:#6b7280;color:#fff;border:none;border-radius:5px;
         padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
     </div>`;
@@ -7932,7 +8027,6 @@ selectDate = function(ds) {
 // PRINT: QP Statement (Image 1) — one page per class per date
 // ════════════════════════════════════════════════════════════════
 function printQPStatement() {
-  clearPrintArtifacts();
   if (!currentDate) { showModal('QP Statement', 'Please select an exam date first.'); return; }
   const ds       = currentDate;
   const dsState  = state.dateStates[ds];
@@ -7994,16 +8088,27 @@ function printQPStatement() {
     });
   });
 
+  const session = beginPrintSession({
+    reportKey: 'qpStatement',
+    beforePrint: () => {
+      const o = document.getElementById('qp-stmt-overlay');
+      if (o) { o.style.position='static'; o.style.overflow='visible'; o.style.background='#fff'; }
+    },
+    afterPrint: () => {
+      const o = document.getElementById('qp-stmt-overlay');
+      if (o) { o.style.position='fixed'; o.style.overflow='auto'; o.style.background='#e5e7eb'; }
+    },
+  });
   const style = document.createElement('style');
-  style.id = 'qp-stmt-style';
-  document.getElementById('qp-stmt-style')?.remove();
-  style.textContent = `
-    @media print {
-      @page { size: A4 portrait; margin: 20mm; }
-      body > *:not(#qp-stmt-overlay) { display:none!important; }
-      #qp-stmt-overlay { position:static!important;background:#fff!important;overflow:visible!important; }
-      #qp-stmt-overlay > div:first-child { display:none!important; }
-    }
+  style.id = session.styleId;
+  document.getElementById(session.styleId)?.remove();
+  style.textContent = `${buildPrintShellCSS({
+      overlayId: session.overlayId,
+      pageSize: session.pageSize,
+      orientation: session.orientation,
+      margins: session.margins
+    })}
+      @media print { #qp-stmt-overlay > div:first-child { display:none!important; } }
     .qp-page { width:170mm;margin:0 auto 0 auto;padding:10mm 0;page-break-after:always;font-family:Arial,sans-serif; }
     .qp-page:last-child { page-break-after:avoid; }
     .qp-title { text-align:center;font-size:16pt;font-weight:700;text-decoration:underline;margin-bottom:12mm; }
@@ -8018,28 +8123,15 @@ function printQPStatement() {
   `;
   document.head.appendChild(style);
 
-  document.getElementById('qp-stmt-overlay')?.remove();
-  if (window._qpStmtBeforePrint) window.removeEventListener('beforeprint', window._qpStmtBeforePrint);
-  if (window._qpStmtAfterPrint)  window.removeEventListener('afterprint',  window._qpStmtAfterPrint);
-  window._qpStmtBeforePrint = () => {
-    const o = document.getElementById('qp-stmt-overlay');
-    if (o) { o.style.position='static'; o.style.overflow='visible'; o.style.background='#fff'; }
-  };
-  window._qpStmtAfterPrint = () => {
-    const o = document.getElementById('qp-stmt-overlay');
-    if (o) { o.style.position='fixed'; o.style.overflow='auto'; o.style.background='#e5e7eb'; }
-  };
-  window.addEventListener('beforeprint', window._qpStmtBeforePrint);
-  window.addEventListener('afterprint',  window._qpStmtAfterPrint);
   const overlay = document.createElement('div');
-  overlay.id = 'qp-stmt-overlay';
+  overlay.id = session.overlayId;
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
   overlay.innerHTML = `
     <div style="background:#0c1c35;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;">
       <span style="font-weight:700;">📄 QP Statement — ${ds}</span>
       <div style="display:flex;gap:8px;">
         <button onclick="window.print()" style="background:#f59e0b;color:#000;border:none;border-radius:5px;padding:6px 16px;font-weight:700;cursor:pointer;">🖨️ Print / Save PDF</button>
-        <button onclick="document.getElementById('qp-stmt-overlay').remove();document.getElementById('qp-stmt-style')?.remove();if(window._qpStmtBeforePrint)window.removeEventListener('beforeprint',window._qpStmtBeforePrint);if(window._qpStmtAfterPrint)window.removeEventListener('afterprint',window._qpStmtAfterPrint);" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:6px 14px;cursor:pointer;">✕ Close</button>
+        <button onclick="closePrintSession('qpStatement','qp-stmt-overlay','qp-stmt-style')" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:6px 14px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
     <div style="padding:20px;">${pages}</div>`;
@@ -8050,7 +8142,6 @@ function printQPStatement() {
 // PRINT: Bank QP Register (Image 2) — all dates all subjects
 // ════════════════════════════════════════════════════════════════
 function printBankQPRegister() {
-  clearPrintArtifacts();
   if (!state.allDates.length) { showModal('Bank QP Register', 'No dates found. Please generate seating first.'); return; }
 
   const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
@@ -8089,46 +8180,43 @@ function printBankQPRegister() {
     });
   });
 
+  const session = beginPrintSession({
+    reportKey: 'qpRegister',
+    beforePrint: () => {
+      const o = document.getElementById('qp-reg-overlay');
+      if (o) { o.style.position='static'; o.style.overflow='visible'; o.style.background='#fff'; }
+    },
+    afterPrint: () => {
+      const o = document.getElementById('qp-reg-overlay');
+      if (o) { o.style.position='fixed'; o.style.overflow='auto'; o.style.background='#e5e7eb'; }
+    },
+  });
+
   const styleEl = document.createElement('style');
-  styleEl.id = 'qp-reg-style';
-  document.getElementById('qp-reg-style')?.remove();
-  styleEl.textContent = `
-    @media print {
-      @page { size:A4 landscape; margin:10mm 12mm; }
-      body > *:not(#qp-reg-overlay) { display:none!important; }
-      #qp-reg-overlay { position:static!important;background:#fff!important;overflow:visible!important; }
-      #qp-reg-overlay > div:first-child { display:none!important; }
-      thead { display:table-header-group; }
+  styleEl.id = session.styleId;
+  document.getElementById(session.styleId)?.remove();
+  styleEl.textContent = `${buildPrintShellCSS({
+      overlayId: session.overlayId,
+      pageSize: session.pageSize,
+      orientation: session.orientation,
+      margins: session.margins
+    })}
+      @media print { #qp-reg-overlay > div:first-child { display:none!important; } }
       input { border:none!important;background:transparent!important; }
-    }
     #qp-reg-overlay table { font-family:Arial,sans-serif;font-size:9pt; }
     #qp-reg-overlay input:focus { background:#fffbeb!important; }
   `;
   document.head.appendChild(styleEl);
 
-  document.getElementById('qp-reg-overlay')?.remove();
-  // Remove any previous print handlers
-  if (window._qpRegBeforePrint) window.removeEventListener('beforeprint', window._qpRegBeforePrint);
-  if (window._qpRegAfterPrint)  window.removeEventListener('afterprint',  window._qpRegAfterPrint);
-  window._qpRegBeforePrint = () => {
-    const o = document.getElementById('qp-reg-overlay');
-    if (o) { o.style.position='static'; o.style.overflow='visible'; o.style.background='#fff'; }
-  };
-  window._qpRegAfterPrint = () => {
-    const o = document.getElementById('qp-reg-overlay');
-    if (o) { o.style.position='fixed'; o.style.overflow='auto'; o.style.background='#e5e7eb'; }
-  };
-  window.addEventListener('beforeprint', window._qpRegBeforePrint);
-  window.addEventListener('afterprint',  window._qpRegAfterPrint);
   const overlay = document.createElement('div');
-  overlay.id = 'qp-reg-overlay';
+  overlay.id = session.overlayId;
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
   overlay.innerHTML = `
     <div style="background:#0c1c35;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;">
       <span style="font-weight:700;">📋 Bank QP Register</span>
       <div style="display:flex;gap:8px;">
         <button onclick="window.print()" style="background:#f59e0b;color:#000;border:none;border-radius:5px;padding:6px 16px;font-weight:700;cursor:pointer;">🖨️ Print / Save PDF</button>
-        <button onclick="document.getElementById('qp-reg-overlay').remove();document.getElementById('qp-reg-style')?.remove();if(window._qpRegBeforePrint)window.removeEventListener('beforeprint',window._qpRegBeforePrint);if(window._qpRegAfterPrint)window.removeEventListener('afterprint',window._qpRegAfterPrint);" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:6px 14px;cursor:pointer;">✕ Close</button>
+        <button onclick="closePrintSession('qpRegister','qp-reg-overlay','qp-reg-style')" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:6px 14px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
     <div style="padding:16px;">
