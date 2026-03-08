@@ -5060,6 +5060,8 @@ function printSeatSlips() {
         const sub=(s.dateSubjects[ds]||[])[0]; return sub?sub.code+'-'+sub.name:'';
       }).filter(Boolean))].join(' | ');
 
+      const rowH = Math.floor(165/PHYS_ROWS);
+
       function slip(s) {
         if (!s) return `<td style="border:1px solid #ccc;padding:0;width:${100/COLS}%;vertical-align:middle;text-align:center;background:#f8f8f8;">
             <div style="height:100%;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:9pt;letter-spacing:1px;">VACANT</div>
@@ -5093,8 +5095,16 @@ function printSeatSlips() {
         const rollSizeNum = Math.max(18, Math.min(34, Math.round((byInfo - byDigitsPenalty) * colFactor)));
         const rollFont = `${rollSizeNum}pt`;
 
+        const rollOnly = infoCount === 0;
+        if (rollOnly) {
+          return `<td style="border:1.5px solid #555;padding:0;width:${100/COLS}%;vertical-align:middle;">
+            <div style="height:${rowH}mm;display:flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box;padding:0 6px;">
+              <div style="width:100%;font-size:${rollFont};font-weight:900;font-family:'Arial Black',Arial,sans-serif;letter-spacing:0.2px;line-height:0.95;white-space:nowrap;overflow:hidden;text-overflow:clip;color:#000;">${s.roll}</div>
+            </div>
+          </td>`;
+        }
         return `<td style="border:1.5px solid #555;padding:0;width:${100/COLS}%;vertical-align:top;">
-          <div style="padding:6px 8px 5px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:${infoCount<=1?'center':'flex-start'};">
+          <div style="padding:6px 8px 5px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:${infoCount<=1?'center':'flex-start'};align-items:stretch;text-align:left;">
             <div style="font-size:${rollFont};font-weight:900;font-family:'Arial Black',Arial,sans-serif;letter-spacing:0.2px;line-height:0.95;white-space:nowrap;overflow:hidden;text-overflow:clip;margin-bottom:${infoCount?'4px':'0'};color:#000;">${s.roll}</div>
             ${infoLines}${subLine}${seatLbl}
           </div>
@@ -5102,7 +5112,6 @@ function printSeatSlips() {
       }
 
       let tableRows = '';
-      const rowH = Math.floor(165/PHYS_ROWS);
       for (let r=1; r<=PHYS_ROWS; r++) {
         let cells = '';
         for (let col=1; col<=COLS; col++) {
