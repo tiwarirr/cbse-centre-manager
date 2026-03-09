@@ -1446,6 +1446,15 @@ function buildSlimDateStates(dateStates) {
   return slim;
 }
 
+function getAnswerBookForPersistence() {
+  const ab = ensureAnswerBookState();
+  return {
+    ...ab,
+    // Derived cache; rebuilt from receipts + ledger on load/render.
+    serialRegistry: {},
+  };
+}
+
 let _forceLoadStorageKey = null;
 
 function getSavedSessionsList() {
@@ -1557,7 +1566,7 @@ function saveToBrowser() {
       candidates:   state.candidates,
       dateStates:   slimDateStates,
       qpLog:        state.qpLog,
-      answerBook:   ensureAnswerBookState(),
+      answerBook:   getAnswerBookForPersistence(),
       savedAt:      now,
       payloadVer:   3,
     };
@@ -1603,7 +1612,7 @@ function downloadBackup() {
       candidates:   state.candidates,
       dateStates:   slimDS,
       qpLog:        state.qpLog,
-      answerBook:   ensureAnswerBookState(),
+      answerBook:   getAnswerBookForPersistence(),
       savedAt:      now,
       backupVersion: 3,
     };
@@ -1645,6 +1654,11 @@ Centre: ${centre}
 Saved: ${savedAt}
 
 This will replace all current data.`)) return;
+
+      if (payload.answerBook && typeof payload.answerBook === 'object') {
+        // Keep backup restore quota-safe; registry is rebuilt after load.
+        payload.answerBook.serialRegistry = {};
+      }
 
       // Save to localStorage under the backup's centre code key
       const key = getCentreStorageKey(payload.centreCode);
@@ -9560,6 +9574,16 @@ function doRestoreSession() {
     }
   }
 }
+
+// Best-effort persistence when tab/app is closed or backgrounded.
+window.addEventListener('pagehide', () => {
+  try { saveToBrowser(); } catch (e) {}
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    try { saveToBrowser(); } catch (e) {}
+  }
+});
 </script>
 
 <!-- ══ SUBJECT ORDER MODAL ══════════════════════════════════════ -->
