@@ -601,6 +601,10 @@ tbody tr:last-child td { border-bottom: none; }
       <span>Seating Plan</span>
       <span class="badge" id="badge-seating" style="display:none">0</span>
     </div>
+    <div class="sb-item" data-panel="answerbook" onclick="switchPanel('answerbook')">
+      <span class="icon">📚</span>
+      <span>Answer Book Master</span>
+    </div>
     <div class="sb-item" data-panel="candidates" onclick="switchPanel('candidates')">
       <span class="icon">👥</span>
       <span>Candidates</span>
@@ -1058,23 +1062,42 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
         </div>
 
-        <!-- ── ANSWER BOOK REGISTER ───────────────────────── -->
-        <div id="ab-section" style="display:none;margin-top:20px;">
-          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
-              <div>
-                <div style="font-weight:700;font-size:14px;color:#0c1c35;">📚 Answer Book Register</div>
-                <div style="font-size:11px;color:#64748b;">Track receipts, serial assignments, damaged/missing serials, and final return balance.</div>
-              </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button class="btn btn-outline btn-sm" onclick="exportAnswerBookReceiptExcel()">📥 Receipt Excel</button>
-                <button class="btn btn-outline btn-sm" onclick="exportAnswerBookDaywiseExcel()">📅 Day-wise Excel</button>
-                <button class="btn btn-outline btn-sm" onclick="exportAnswerBookFinalExcel()">🏁 Final Return Excel</button>
-              </div>
-            </div>
-            <div id="ab-content"></div>
-          </div>
+      </div>
+    </div>
+
+    <!-- ══ PANEL: ANSWER BOOK MASTER ══ -->
+    <div id="panel-answerbook" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Answer Book Master & Ledger</h2>
+          <div class="sub">Session setup (types, receipts, mapping) + date-wise assignment and usage</div>
         </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <select id="ab-date-select" class="form-control" style="width:190px;font-size:12px;" onchange="selectABDate(this.value)">
+            <option value="">Select exam date</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="switchPanel('seating')">🪑 Open Seating</button>
+          <button class="btn btn-outline btn-sm" onclick="exportAnswerBookReceiptExcel()">📥 Receipt Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="exportAnswerBookDaywiseExcel()">📅 Day-wise Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="exportAnswerBookFinalExcel()">🏁 Final Return Excel</button>
+        </div>
+      </div>
+
+      <div id="ab-section" style="display:none;">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:700;font-size:14px;color:#0c1c35;">📚 Answer Book Register</div>
+              <div id="ab-panel-sub" style="font-size:11px;color:#64748b;">Track receipts, serial assignments, damaged/missing serials, and final return balance.</div>
+            </div>
+          </div>
+          <div id="ab-content"></div>
+        </div>
+      </div>
+      <div id="ab-empty" class="empty-state" style="display:none;">
+        <div class="empty-icon">📚</div>
+        <div class="empty-title">Select an exam date</div>
+        <div class="empty-sub">Date-wise assignment and usage ledger will appear here.</div>
       </div>
     </div>
 
@@ -3150,11 +3173,14 @@ function buildDateTabs() {
     container.appendChild(tab);
   });
   if (state.allDates.length) selectDate(state.allDates[0]);
+  refreshABDatePicker();
 }
 
 function selectDate(ds) {
   currentDate = ds;
   currentSubjectFilter = 'all';
+  const abSel = document.getElementById('ab-date-select');
+  if (abSel) abSel.value = ds;
   document.querySelectorAll('#date-tabs .date-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.date === ds);
   });
@@ -7566,6 +7592,7 @@ const PANEL_META = {
   upload:     { title:'Upload Files',        sub:'Upload CBSE E-Preeksha HTML files to begin' },
   config:     { title:'Configuration',       sub:'Customise seating arrangement parameters' },
   seating:    { title:'Seating Plan',        sub:'Visual room-wise seating grid' },
+  answerbook: { title:'Answer Book Master',  sub:'Session setup + date-wise answer-book ledger' },
   candidates: { title:'Candidate List',      sub:'All candidates with seat assignments' },
   schedule:   { title:'Centre Seating Plan Summary', sub:'Consolidated + subject-wise room summaries with roll ranges' },
   export:     { title:'Export Documents',    sub:'Download Excel and PDF reports' },
@@ -7580,6 +7607,43 @@ function switchPanel(id) {
   const meta = PANEL_META[id] || {};
   document.getElementById('topbar-title').textContent = meta.title || '';
   document.getElementById('topbar-sub').textContent   = meta.sub   || '';
+  if (id === 'answerbook') {
+    refreshABDatePicker();
+    const targetDs = currentDate || state.allDates[0] || '';
+    if (targetDs) {
+      renderAnswerBookSection(targetDs);
+      const sel = document.getElementById('ab-date-select');
+      if (sel) sel.value = targetDs;
+    } else {
+      const sec = document.getElementById('ab-section');
+      const emp = document.getElementById('ab-empty');
+      if (sec) sec.style.display = 'none';
+      if (emp) emp.style.display = 'block';
+    }
+  }
+}
+
+function refreshABDatePicker() {
+  const sel = document.getElementById('ab-date-select');
+  if (!sel) return;
+  const prev = sel.value || currentDate || '';
+  const options = [`<option value="">Select exam date</option>`]
+    .concat((state.allDates || []).map(ds => `<option value="${ds}">${ds} (${dayName(ds)})</option>`));
+  sel.innerHTML = options.join('');
+  const pick = (state.allDates || []).includes(prev) ? prev : (currentDate || state.allDates[0] || '');
+  if (pick) sel.value = pick;
+}
+
+function selectABDate(ds) {
+  if (!ds) {
+    const sec = document.getElementById('ab-section');
+    const emp = document.getElementById('ab-empty');
+    if (sec) sec.style.display = 'none';
+    if (emp) emp.style.display = 'block';
+    return;
+  }
+  selectDate(ds);
+  renderAnswerBookSection(ds);
 }
 
 function resetAll() { fullReset(); }
@@ -8564,6 +8628,92 @@ function abBulkAutoAssign(ds) {
   showModal('Bulk Auto-Assign', msg);
 }
 
+function abBulkUnassign(ds, scope, kind, roomNoRaw) {
+  ensureAnswerBookState();
+  const dsState = getDateState(ds);
+  if (dsState.status === 'locked') {
+    showModal('Date Locked', 'Unlock the date first to run Bulk Unassign.');
+    return;
+  }
+  const ledger = getABDateLedger(ds);
+  const seated = dsState.seating || [];
+  if (!seated.length) {
+    showModal('No Seating', 'No seating found for selected date.');
+    return;
+  }
+
+  let targets = seated;
+  let roomNo = null;
+  if (scope === 'room') {
+    roomNo = Number(roomNoRaw || 0);
+    if (!roomNo) {
+      showModal('Room Required', 'Select a room for room-wise bulk unassign.');
+      return;
+    }
+    targets = seated.filter(s => Number(s.roomNo) === roomNo);
+    if (!targets.length) {
+      showModal('No Rows', `No candidates found in Room ${roomNo} for ${ds}.`);
+      return;
+    }
+  }
+
+  const rolls = new Set(targets.map(s => s.roll));
+  let mainCleared = 0;
+  let suppCleared = 0;
+
+  if (kind === 'main' || kind === 'both') {
+    rolls.forEach(roll => {
+      if (ledger.assignments && ledger.assignments[roll]) {
+        delete ledger.assignments[roll];
+        mainCleared += 1;
+      }
+    });
+  }
+
+  if (kind === 'supp' || kind === 'both') {
+    rolls.forEach(roll => {
+      const arr = (ledger.suppAssignments && ledger.suppAssignments[roll]) || [];
+      if (arr.length) {
+        suppCleared += arr.length;
+        delete ledger.suppAssignments[roll];
+      }
+      if (ledger.suppEntryErrors && ledger.suppEntryErrors[roll]) {
+        delete ledger.suppEntryErrors[roll];
+      }
+    });
+  }
+
+  if (!mainCleared && !suppCleared) {
+    showModal('No Changes', 'No matching assignments found to unassign.');
+    return;
+  }
+
+  const scopeTxt = scope === 'room' ? `Room ${roomNo}` : 'Full date';
+  const kindTxt = kind === 'both' ? 'Main+Supplementary' : (kind === 'main' ? 'Main' : 'Supplementary');
+  abAddAudit(
+    'AB_BULK_UNASSIGN',
+    `Date ${ds} ${scopeTxt} ${kindTxt}: main ${mainCleared}, supp ${suppCleared}`
+  );
+  rebuildAnswerBookRegistry();
+  saveToBrowser();
+  renderAnswerBookSection(ds);
+  showModal('Bulk Unassign', [
+    `Done for ${ds}.`,
+    `Scope: ${scopeTxt}`,
+    `Target: ${kindTxt}`,
+    `Main cleared: ${mainCleared}`,
+    `Supplementary cleared: ${suppCleared}`,
+  ].join('\n'));
+}
+
+function runABBulkUnassign(ds) {
+  const scope = document.getElementById(`ab-bulk-unassign-scope-${ds}`)?.value || 'date';
+  const kind = document.getElementById(`ab-bulk-unassign-kind-${ds}`)?.value || 'both';
+  const roomNo = document.getElementById(`ab-bulk-unassign-room-${ds}`)?.value || '';
+  if (!confirm(`Run Bulk Unassign?\n\nDate: ${ds}\nScope: ${scope === 'room' ? 'Room' : 'Full date'}\nTarget: ${kind.toUpperCase()}`)) return;
+  abBulkUnassign(ds, scope, kind, roomNo);
+}
+
 function abClearAssignment(ds, roll) {
   const ledger = getABDateLedger(ds);
   const prev = ledger.assignments[roll];
@@ -8808,6 +8958,54 @@ function addABSuppForRoll(ds, roll, cls) {
   renderAnswerBookSection(ds);
 }
 
+let abEditingReceiptId = null;
+
+function getABReceiptById(receiptId) {
+  const ab = ensureAnswerBookState();
+  return (ab.receipts || []).find(r => Number(r.id) === Number(receiptId)) || null;
+}
+
+function resetABReceiptForm(ds) {
+  const ids = ['ab-rec-type', 'ab-rec-date', 'ab-rec-start', 'ab-rec-end', 'ab-rec-challan'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id === 'ab-rec-type') el.value = '';
+    else if (id === 'ab-rec-date') el.value = ds || '';
+    else el.value = '';
+  });
+}
+
+function startABReceiptEdit(receiptId, ds) {
+  const r = getABReceiptById(receiptId);
+  if (!r) return;
+  abEditingReceiptId = Number(receiptId);
+  const typeEl = document.getElementById('ab-rec-type');
+  const dateEl = document.getElementById('ab-rec-date');
+  const startEl = document.getElementById('ab-rec-start');
+  const endEl = document.getElementById('ab-rec-end');
+  const challanEl = document.getElementById('ab-rec-challan');
+  if (typeEl) typeEl.value = String(r.typeId || '');
+  if (dateEl) dateEl.value = r.date || (ds || '');
+  if (startEl) startEl.value = r.startSerial || '';
+  if (endEl) endEl.value = r.endSerial || '';
+  if (challanEl) challanEl.value = r.challanNo || '';
+  renderAnswerBookSection(ds || currentDate || null);
+}
+
+function cancelABReceiptEdit(ds) {
+  abEditingReceiptId = null;
+  resetABReceiptForm(ds);
+  renderAnswerBookSection(ds || currentDate || null);
+}
+
+function abReceiptHasDownstreamUsage(receiptId) {
+  const ab = ensureAnswerBookState();
+  rebuildAnswerBookRegistry();
+  if ((ab.receiptExceptions || []).some(ex => Number(ex.receiptId) === Number(receiptId))) return true;
+  return Object.values(ab.serialRegistry || {}).some(s => Number(s.receiptId) === Number(receiptId) && s.status !== 'AVAILABLE');
+}
+
 function addABReceipt() {
   const ab = ensureAnswerBookState();
   const typeId = Number(document.getElementById('ab-rec-type')?.value || 0);
@@ -8826,30 +9024,57 @@ function addABReceipt() {
     return;
   }
   const tmpReg = rebuildAnswerBookRegistry();
+  const editingId = Number(abEditingReceiptId || 0);
   const width = Math.max(p1.width, p2.width);
   for (let n = p1.num; n <= p2.num; n++) {
     const sr = abSerialText(p1.prefix, n, width);
     const pr = parseABSerial(sr);
-    if (pr && tmpReg[pr.normalized]) {
+    if (pr && tmpReg[pr.normalized] && Number(tmpReg[pr.normalized].receiptId) !== editingId) {
       showModal('Overlap', `Serial already exists in stock: ${sr}`);
       return;
     }
   }
   const challanQty = p2.num - p1.num + 1;
-  ab.receipts.push({
-    id: ab.nextReceiptId++,
-    date,
-    typeId,
-    startSerial: startSerial.toUpperCase(),
-    endSerial: endSerial.toUpperCase(),
-    challanNo,
-    challanQty,
-    createdAt: Date.now(),
-  });
-  abAddAudit('AB_RECEIPT_ADD', `${date} type ${typeId} ${startSerial}-${endSerial}`);
-  ['ab-rec-start','ab-rec-end','ab-rec-challan'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
+  if (editingId) {
+    const rec = (ab.receipts || []).find(r => Number(r.id) === editingId);
+    if (!rec) {
+      abEditingReceiptId = null;
+      showModal('Edit Failed', 'Selected receipt not found.');
+      return;
+    }
+    const lockedForRangeEdit = abReceiptHasDownstreamUsage(editingId);
+    const rangeChanged = rec.startSerial !== startSerial || rec.endSerial !== endSerial;
+    const typeChanged = Number(rec.typeId) !== Number(typeId);
+    if (lockedForRangeEdit && (rangeChanged || typeChanged)) {
+      showModal('Edit Restricted', 'This receipt already has usage/exceptions. Only date and challan number can be edited now.');
+      return;
+    }
+    const before = `${rec.date} type ${rec.typeId} ${rec.startSerial}-${rec.endSerial}`;
+    rec.date = date;
+    rec.challanNo = challanNo;
+    if (!lockedForRangeEdit) {
+      rec.typeId = typeId;
+      rec.startSerial = startSerial;
+      rec.endSerial = endSerial;
+      rec.challanQty = challanQty;
+    }
+    abAddAudit('AB_RECEIPT_EDIT', `${before} -> ${rec.date} type ${rec.typeId} ${rec.startSerial}-${rec.endSerial}`);
+    abEditingReceiptId = null;
+    resetABReceiptForm(currentDate || null);
+  } else {
+    ab.receipts.push({
+      id: ab.nextReceiptId++,
+      date,
+      typeId,
+      startSerial: startSerial.toUpperCase(),
+      endSerial: endSerial.toUpperCase(),
+      challanNo,
+      challanQty,
+      createdAt: Date.now(),
+    });
+    abAddAudit('AB_RECEIPT_ADD', `${date} type ${typeId} ${startSerial}-${endSerial}`);
+    resetABReceiptForm(currentDate || null);
+  }
   rebuildAnswerBookRegistry();
   saveToBrowser();
   renderAnswerBookSection(currentDate || null);
@@ -9050,14 +9275,19 @@ function compressABSerialRanges(serials) {
 function renderAnswerBookSection(ds) {
   const section = document.getElementById('ab-section');
   const container = document.getElementById('ab-content');
+  const empty = document.getElementById('ab-empty');
+  const sub = document.getElementById('ab-panel-sub');
   if (!section || !container) return;
   ensureAnswerBookState();
   rebuildAnswerBookRegistry();
   if (!ds || !state.dateStates[ds]?.seating?.length) {
     section.style.display = 'none';
+    if (empty) empty.style.display = 'block';
     return;
   }
   section.style.display = 'block';
+  if (empty) empty.style.display = 'none';
+  if (sub) sub.textContent = `Track receipts, serial assignments, damaged/missing serials, and final return balance. Active date: ${ds}`;
 
   const ab = ensureAnswerBookState();
   const dsState = getDateState(ds);
@@ -9068,6 +9298,11 @@ function renderAnswerBookSection(ds) {
   const typeOptions = `<option value="">Select type</option>` + types.map(t => `<option value="${t.id}">${t.shortCode} - ${t.name}</option>`).join('');
   const combos = getABSubjectCombos();
   const receipts = ab.receipts || [];
+  const editingReceipt = abEditingReceiptId ? getABReceiptById(abEditingReceiptId) : null;
+  const editingReceiptLocked = editingReceipt ? abReceiptHasDownstreamUsage(editingReceipt.id) : false;
+  const receiptTypeOptions = `<option value="">Select type</option>` + types.map(t =>
+    `<option value="${t.id}" ${editingReceipt && String(editingReceipt.typeId) === String(t.id) ? 'selected' : ''}>${t.shortCode} - ${t.name}</option>`
+  ).join('');
   const receiptOptions = `<option value="">Select receipt</option>` + receipts.map(r => {
     const t = getABType(r.typeId);
     return `<option value="${r.id}">#${r.id} ${r.date} · ${t ? t.shortCode : r.typeId} · ${r.startSerial}-${r.endSerial}</option>`;
@@ -9103,8 +9338,11 @@ function renderAnswerBookSection(ds) {
       <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#dc2626;">${miss}</td>
       <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#b45309;">${dmg}</td>
       <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:#0c1c35;">${usable}</td>
+      <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;text-align:right;">
+        <button class="btn btn-outline btn-sm" onclick="startABReceiptEdit(${r.id},'${ds}')">Edit</button>
+      </td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" style="padding:8px;color:#64748b;">No receipts yet.</td></tr>`;
+  }).join('') || `<tr><td colspan="9" style="padding:8px;color:#64748b;">No receipts yet.</td></tr>`;
 
   const exRows = (ab.receiptExceptions || []).slice().sort((a, b) => b.createdAt - a.createdAt).map(ex => {
     const t = getABType(ex.typeId);
@@ -9120,6 +9358,7 @@ function renderAnswerBookSection(ds) {
   }).join('') || `<tr><td colspan="5" style="padding:8px;color:#64748b;">No receipt exceptions.</td></tr>`;
 
   const seated = (dsState.seating || []).slice().sort((a,b) => a.roomNo - b.roomNo || a.seatInRoom - b.seatInRoom);
+  const roomNos = [...new Set(seated.map(s => Number(s.roomNo)).filter(Boolean))].sort((a,b) => a-b);
   const escSq = v => String(v || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const assignRows = seated.map(s => {
     const sub = getPrimarySubject(s, ds);
@@ -9232,16 +9471,18 @@ function renderAnswerBookSection(ds) {
       </div>
 
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px;">
-        <div style="font-weight:700;font-size:12px;color:#0c1c35;margin-bottom:8px;">Receipt Entry</div>
+        <div style="font-weight:700;font-size:12px;color:#0c1c35;margin-bottom:8px;">Receipt Entry ${editingReceipt ? `<span style="color:#b45309;">(Editing #${editingReceipt.id})</span>` : ''}</div>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:6px;">
-          <select id="ab-rec-type" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;">${typeOptions}</select>
-          <input id="ab-rec-date" type="date" value="${ds}" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;">
-          <input id="ab-rec-start" placeholder="Start serial" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;text-transform:uppercase;">
-          <input id="ab-rec-end" placeholder="End serial" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;text-transform:uppercase;">
-          <input id="ab-rec-challan" placeholder="Challan no." style="grid-column:1/3;font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;">
+          <select id="ab-rec-type" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;" ${editingReceiptLocked ? 'disabled' : ''}>${receiptTypeOptions}</select>
+          <input id="ab-rec-date" type="date" value="${editingReceipt ? editingReceipt.date : ds}" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;">
+          <input id="ab-rec-start" value="${editingReceipt ? editingReceipt.startSerial : ''}" placeholder="Start serial" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;text-transform:uppercase;" ${editingReceiptLocked ? 'disabled' : ''}>
+          <input id="ab-rec-end" value="${editingReceipt ? editingReceipt.endSerial : ''}" placeholder="End serial" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;text-transform:uppercase;" ${editingReceiptLocked ? 'disabled' : ''}>
+          <input id="ab-rec-challan" value="${editingReceipt ? (editingReceipt.challanNo || '') : ''}" placeholder="Challan no." style="grid-column:1/3;font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;">
         </div>
-        <div style="margin-top:8px;">
-          <button class="btn btn-outline btn-sm" onclick="addABReceipt()">Add Receipt</button>
+        <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="addABReceipt()">${editingReceipt ? 'Update Receipt' : 'Add Receipt'}</button>
+          ${editingReceipt ? `<button class="btn btn-outline btn-sm" onclick="cancelABReceiptEdit('${ds}')">Cancel</button>` : ''}
+          ${editingReceiptLocked ? `<span style="font-size:11px;color:#92400e;">Type/range locked due to existing usage.</span>` : ''}
         </div>
       </div>
     </div>
@@ -9302,7 +9543,7 @@ function renderAnswerBookSection(ds) {
       <div style="font-weight:700;font-size:12px;color:#0c1c35;margin-bottom:6px;">Receipt Register</div>
       <div style="max-height:170px;overflow:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead><tr style="background:#f8fafc;"><th style="padding:5px 6px;text-align:left;">Receipt</th><th style="padding:5px 6px;text-align:left;">Date</th><th style="padding:5px 6px;text-align:left;">Type</th><th style="padding:5px 6px;text-align:left;">Range</th><th style="padding:5px 6px;text-align:center;">Challan</th><th style="padding:5px 6px;text-align:center;">Missing</th><th style="padding:5px 6px;text-align:center;">Damaged</th><th style="padding:5px 6px;text-align:center;">Usable</th></tr></thead>
+          <thead><tr style="background:#f8fafc;"><th style="padding:5px 6px;text-align:left;">Receipt</th><th style="padding:5px 6px;text-align:left;">Date</th><th style="padding:5px 6px;text-align:left;">Type</th><th style="padding:5px 6px;text-align:left;">Range</th><th style="padding:5px 6px;text-align:center;">Challan</th><th style="padding:5px 6px;text-align:center;">Missing</th><th style="padding:5px 6px;text-align:center;">Damaged</th><th style="padding:5px 6px;text-align:center;">Usable</th><th style="padding:5px 6px;text-align:right;">Actions</th></tr></thead>
           <tbody>${receiptRows}</tbody>
         </table>
       </div>
@@ -9313,6 +9554,20 @@ function renderAnswerBookSection(ds) {
         <div style="font-weight:700;font-size:12px;color:#0c1c35;">Date-wise Candidate Serial Assignment — ${ds}</div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="abBulkAutoAssign('${ds}')">⚡ Bulk Auto-Assign</button>
+          <select id="ab-bulk-unassign-scope-${ds}" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;">
+            <option value="date">Unassign scope: Full date</option>
+            <option value="room">Unassign scope: Room</option>
+          </select>
+          <select id="ab-bulk-unassign-room-${ds}" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;min-width:130px;">
+            <option value="">Select room</option>
+            ${roomNos.map(r => `<option value="${r}">Room ${r}</option>`).join('')}
+          </select>
+          <select id="ab-bulk-unassign-kind-${ds}" style="font-size:12px;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;">
+            <option value="both">Target: Main + Supp</option>
+            <option value="main">Target: Main only</option>
+            <option value="supp">Target: Supp only</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="runABBulkUnassign('${ds}')">Bulk Unassign</button>
           <div style="font-size:11px;color:${dsState.status==='locked'?'#b45309':'#64748b'};">
             ${dsState.status==='locked'?'Date locked (unlock to edit)':'Editable (before lock)'}
           </div>
