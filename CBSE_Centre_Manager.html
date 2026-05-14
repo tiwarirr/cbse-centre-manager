@@ -4956,7 +4956,7 @@ const PRINT_REPORT_REGISTRY = {
   appendixX:      { overlayId: 'appendixe-overlay-X',   styleId: 'appendixe-style-X',   pageSize: 'A4', orientation: 'portrait',  margins: '14mm 16mm 14mm 16mm' },
   appendixXII:    { overlayId: 'appendixe-overlay-XII', styleId: 'appendixe-style-XII', pageSize: 'A4', orientation: 'portrait',  margins: '14mm 16mm 14mm 16mm' },
   slips:          { overlayId: 'slips-overlay',         styleId: 'slips-print-style',   pageSize: 'A4', orientation: 'landscape', margins: '7mm 8mm 7mm 8mm' },
-  roomSummary:    { overlayId: 'summary-overlay',       styleId: 'summary-print-style', pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
+  roomSummary:    { overlayId: 'summary-overlay',       styleId: 'summary-print-style', pageSize: 'A4', orientation: 'landscape',  margins: '10mm 12mm 10mm 12mm' },
   centreMemo:     { overlayId: 'memo-overlay',          styleId: 'memo-print-style',    pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
   form66:         { overlayId: 'form66-overlay',        styleId: 'form66-print-style',  pageSize: 'A4', orientation: 'portrait',  margins: '8mm 10mm 8mm 10mm' },
   attendanceX:    { overlayId: 'attsheet-overlay-X',    styleId: 'attsheet-style-X',    pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
@@ -4966,7 +4966,7 @@ const PRINT_REPORT_REGISTRY = {
   invLetters:     { overlayId: 'inv-letters-overlay',   styleId: 'inv-letters-style',   pageSize: 'A4', orientation: 'portrait',  margins: '20mm 18mm 20mm 25mm' },
   triplicate:     { overlayId: 'triplicate-overlay',    styleId: 'triplicate-print-style', pageSize: 'A4', orientation: 'portrait', margins: '8mm 12mm 8mm 12mm' },
   qpStatement:    { overlayId: 'qp-stmt-overlay',       styleId: 'qp-stmt-style',       pageSize: 'A4', orientation: 'portrait',  margins: '20mm' },
-  qpRegister:     { overlayId: 'qp-reg-overlay',        styleId: 'qp-reg-style',        pageSize: 'A4', orientation: 'landscape', margins: '10mm 12mm' },
+  qpRegister:     { overlayId: 'qp-reg-overlay',        styleId: 'qp-reg-style',        pageSize: 'A4', orientation: 'portrait', margins: '10mm 12mm' },
 };
 
 const PRINT_RUNTIME = {
@@ -5445,7 +5445,7 @@ function printSeatSlips() {
         else if (opts.classLabel)            subLine = `<div style="font-size:7pt;color:#333;">${cls}(${s.class})</div>`;
         else if (opts.subject)               subLine = `<div style="font-size:7pt;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${subLabel}</div>`;
 
-        const seatLbl = opts.seatLabel ? `<div style="font-size:6.5pt;color:#aaa;text-align:right;margin-top:3px;">R${s.row}-C${s.col}</div>` : '';
+        const seatLbl = opts.seatLabel ? `<div style="font-size:6.5pt;color:#aaa;text-align:center;margin-top:3px;">R${s.row}-C${s.col}</div>` : '';
 
         // Roll font size — bounded to avoid overflow in dense grids / minimal-info mode.
         const infoCount = (opts.name?1:0) + (opts.school?1:0) + (opts.father?1:0) + (opts.mother?1:0)
@@ -5465,8 +5465,8 @@ function printSeatSlips() {
             </div>
           </td>`;
         }
-        return `<td style="border:1.5px solid #555;padding:0;width:${100/COLS}%;vertical-align:top;">
-          <div style="padding:6px 8px 5px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:${infoCount<=1?'center':'flex-start'};align-items:stretch;text-align:left;">
+        return `<td style="border:1.5px solid #555;padding:0;width:${100/COLS}%;vertical-align:middle;">
+          <div style="padding:6px 8px 5px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
             <div style="font-size:${rollFont};font-weight:900;font-family:'Arial Black',Arial,sans-serif;letter-spacing:0.2px;line-height:0.95;white-space:nowrap;overflow:hidden;text-overflow:clip;margin-bottom:${infoCount?'4px':'0'};color:#000;">${s.roll}</div>
             ${infoLines}${subLine}${seatLbl}
           </div>
@@ -5610,26 +5610,12 @@ function printRoomSummary() {
   // ── Build school header columns (code on top, name wrapped below) ──
   // Each school col: fixed width via CSS
 
-  // Break school name into ~3 lines at word boundaries (~15 chars each)
-  function wrapName(name, charsPerLine) {
-    const words = name.split(' ');
-    const lines = [];
-    let cur = '';
-    words.forEach(w => {
-      if (!cur) { cur = w; }
-      else if ((cur + ' ' + w).length <= charsPerLine) { cur += ' ' + w; }
-      else { lines.push(cur); cur = w; }
-    });
-    if (cur) lines.push(cur);
-    return lines.join('<br>');
-  }
-
   const schoolCols = schools.map(([code, name]) =>
-    `<th style="border:1px solid #000;padding:4px 2px;font-size:6.5pt;text-align:center;
-      min-width:26px;max-width:36px;width:32px;font-weight:bold;
-      vertical-align:bottom;line-height:1.3;background:#fff;color:#000;">
-      <div style="font-size:7pt;font-weight:bold;">${code}</div>
-      <div style="font-weight:normal;font-size:6pt;">${wrapName(name,14)}</div>
+    `<th style="border:1px solid #000;padding:6px 2px;font-size:6.5pt;text-align:center;
+      min-width:40px;max-width:55px;width:50px;font-weight:bold;
+      vertical-align:bottom;line-height:1.5;background:#fff;color:#000;">
+      <div style="font-size:8pt;font-weight:bold;margin-bottom:2px;">${code}</div>
+      <div style="font-weight:normal;font-size:7pt;">${name.substring(0, 6)}....</div>
     </th>`
   ).join('');
 
@@ -5638,36 +5624,36 @@ function printRoomSummary() {
   rooms.forEach(r => {
     const cells = schools.map(([code]) => {
       const v = matrix[r][code] || 0;
-      return `<td style="border:1px solid #000;padding:4px 4px;font-size:8.5pt;text-align:center;">${v > 0 ? v : ''}</td>`;
+      return `<td style="border:1px solid #000;padding:10px 4px;font-size:10pt;text-align:center;">${v > 0 ? v : ''}</td>`;
     }).join('');
 
     dataRows += `
       <tr>
-        <td style="border:1px solid #000;padding:4px 6px;font-size:8.5pt;text-align:center;font-weight:bold;">${r}</td>
+        <td style="border:1px solid #000;padding:10px 6px;font-size:10pt;text-align:center;font-weight:bold;">${r}</td>
         ${cells}
-        <td style="border:1px solid #000;padding:4px 4px;font-size:8.5pt;text-align:center;font-weight:bold;">${roomTotals[r]}</td>
-        <td style="border:1px solid #000;padding:4px 4px;font-size:8.5pt;"></td>
-        <td style="border:1px solid #000;padding:4px 4px;font-size:8.5pt;"></td>
+        <td style="border:1px solid #000;padding:10px 4px;font-size:10pt;text-align:center;font-weight:bold;">${roomTotals[r]}</td>
+        <td style="border:1px solid #000;padding:10px 4px;font-size:10pt;"></td>
+        <td style="border:1px solid #000;padding:10px 4px;font-size:10pt;"></td>
       </tr>
 `;
   });
 
   // ── Total row ──
   const totalCells = schools.map(([code]) =>
-    `<td style="border:1px solid #000;padding:4px 4px;font-size:8.5pt;text-align:center;font-weight:bold;">${schoolTotals[code] || ''}</td>`
+    `<td style="border:1px solid #000;padding:10px 4px;font-size:10pt;text-align:center;font-weight:bold;">${schoolTotals[code] || ''}</td>`
   ).join('');
 
   const totalRow = `
-    <tr style="background:#f0f0f0;">
-      <td style="border:1px solid #000;padding:4px 6px;font-size:8.5pt;font-weight:bold;text-align:center;">TOTAL</td>
+    <tr style="background:#fff;">
+      <td style="border:1px solid #000;padding:10px 6px;font-size:10pt;font-weight:bold;text-align:center;">TOTAL</td>
       ${totalCells}
-      <td style="border:1px solid #000;padding:4px 4px;font-size:8.5pt;font-weight:bold;text-align:center;">${grandTotal}</td>
-      <td style="border:1px solid #000;"></td>
-      <td style="border:1px solid #000;"></td>
+      <td style="border:1px solid #000;padding:10px 4px;font-size:10pt;font-weight:bold;text-align:center;">${grandTotal}</td>
+      <td style="border:1px solid #000;padding:10px 4px;font-size:10pt;"></td>
+      <td style="border:1px solid #000;padding:10px 4px;font-size:10pt;"></td>
     </tr>`;
 
   const html = `
-  <div class="summary-page" style="width:190mm;margin:0 auto;font-family:Arial,sans-serif;">
+  <div class="summary-page" style="width:270mm;margin:0 auto;font-family:Arial,sans-serif;">
 
     <!-- ── HEADER ── -->
     <div style="text-align:center;margin-bottom:8pt;border-bottom:2px solid #000;padding-bottom:6pt;">
@@ -5682,15 +5668,15 @@ function printRoomSummary() {
     <table class="summary-table" style="width:100%;border-collapse:collapse;table-layout:fixed;">
       <thead>
         <tr>
-          <th style="border:1px solid #000;padding:4px 6px;font-size:8.5pt;text-align:center;
-            width:30px;background:#fff;color:#000;">ROOM</th>
+          <th style="border:1px solid #000;padding:10px 6px;font-size:10pt;text-align:center;
+            width:50px;background:#fff;color:#000;">ROOM</th>
           ${schoolCols}
-          <th style="border:1px solid #000;padding:4px 4px;font-size:8pt;text-align:center;
-            width:36px;background:#fff;color:#000;">TOTAL<br><span style="font-weight:normal;font-size:7pt;">Cands.</span></th>
-          <th style="border:1px solid #000;padding:4px 4px;font-size:8pt;text-align:center;
-            width:72px;background:#fff;color:#000;">INV-1<br><span style="font-weight:normal;font-size:7pt;">Name</span></th>
-          <th style="border:1px solid #000;padding:4px 4px;font-size:8pt;text-align:center;
-            width:72px;background:#fff;color:#000;">INV-2<br><span style="font-weight:normal;font-size:7pt;">Name</span></th>
+          <th style="border:1px solid #000;padding:10px 4px;font-size:9pt;text-align:center;
+            width:60px;background:#fff;color:#000;">TOTAL<br><span style="font-weight:normal;font-size:8pt;">Cands.</span></th>
+          <th style="border:1px solid #000;padding:10px 4px;font-size:9pt;text-align:center;
+            width:120px;background:#fff;color:#000;">INV-1<br><span style="font-weight:normal;font-size:8pt;">Name</span></th>
+          <th style="border:1px solid #000;padding:10px 4px;font-size:9pt;text-align:center;
+            width:120px;background:#fff;color:#000;">INV-2<br><span style="font-weight:normal;font-size:8pt;">Name</span></th>
         </tr>
       </thead>
       <tbody>
@@ -6113,6 +6099,7 @@ function printForm66() {
     const grandAbsent= rows.reduce((s,r) => s+r.absentCount, 0);
     const grandBooks = rows.reduce((s,r) => s+r.answerBooks, 0);
     const classLabel = cls === 'XII' ? 'AISSCE' : 'SSE';
+    const examTitle  = getExamFullUpper(cls);
     const subjectStr = sub.code + '  ' + sub.name.toUpperCase();
 
     // Build table rows
@@ -6159,17 +6146,17 @@ function printForm66() {
       <!-- ── LETTERHEAD ── -->
       <div style="position:relative;border-bottom:2px solid #000;padding-bottom:6pt;margin-bottom:8pt;">
         <div style="font-size:8.5pt;font-style:italic;position:absolute;top:0;right:0;">
-          CBSE-66/Theory Exam/2026
+          CBSE-66/Theory Exam
         </div>
         <div style="text-align:center;">
           <div style="font-size:13pt;font-weight:bold;letter-spacing:0.5px;">
             CENTRAL BOARD OF SECONDARY EDUCATION, DELHI
           </div>
-          <div style="font-size:10.5pt;font-weight:bold;margin-top:2pt;">THEORY EXAMINATION</div>
+          <div style="font-size:10.5pt;font-weight:bold;margin-top:2pt;">${examTitle}</div>
           <div style="font-size:11pt;font-weight:bold;margin-top:2pt;">
             STATEMENT OF CANDIDATES APPEARED
           </div>
-          <div style="font-size:10pt;margin-top:2pt;">${classLabel}/SSE (2025-26)</div>
+          <div style="font-size:10pt;margin-top:2pt;">${examTitle} (${getExamSessionLabel()})</div>
         </div>
       </div>
 
@@ -6320,11 +6307,12 @@ function printForm66() {
       orientation: 'portrait',
       margins: '12mm 14mm 12mm 14mm'
     })}
-    .form66-page { page-break-after:always; min-height:auto; }
+    .form66-page { page-break-after:always; min-height:auto; background:#fff!important; color:#000!important; }
     .form66-page:last-child { page-break-after:avoid; }
-    .form66-page table thead tr,
-    .form66-page table thead th,
-    .form66-page table thead td {
+    .form66-page, .form66-page * { color:#000!important; }
+    .form66-page table { background:#fff!important; }
+    .form66-page table th,
+    .form66-page table td {
       background:#fff!important;
       -webkit-print-color-adjust:exact;
       print-color-adjust:exact;
@@ -6372,14 +6360,18 @@ function printAttendanceSheet(cls) {
     showModal('No Data', 'No ' + cls + ' candidates found.'); return;
   }
 
-  // ── Collect ALL subject codes used by this class, sort numerically ──
+  // ── Collect ALL subject codes used by this class and map to exact dates ──
   const codeSet = new Set();
-  classCands.forEach(c => Object.values(c.dateSubjects).forEach(subs => subs.forEach(s => codeSet.add(s.code))));
+  const codeToDate = {};
+  classCands.forEach(c => {
+    Object.entries(c.dateSubjects).forEach(([ds, subs]) => {
+      subs.forEach(s => {
+        codeSet.add(s.code);
+        codeToDate[s.code] = ds;
+      });
+    });
+  });
   const allCodes = [...codeSet].sort((a,b) => Number(a)-Number(b));
-
-  // ── Map code → date string (for header) ──
-  const codeToDate = cls === 'X' ? X_CODE_TO_DATE : XII_CODE_TO_DATE;
-  const codeToName = cls === 'X' ? X_CODES : XII_CODES;
 
   // ── Collect all attendance across all dates ──
   // att[roll] = 'A' if absent on that date, else 'P'
@@ -8504,8 +8496,17 @@ function printQPStatement() {
 function printBankQPRegister() {
   if (!state.allDates.length) { showModal('Bank QP Register', 'No dates found. Please generate seating first.'); return; }
 
-  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
-  const centreCode = document.getElementById('cfg-centre-code').value || '';
+  const { centreName, centreCode } = getCentreMeta();
+
+  let classesPresent = new Set();
+  state.allDates.forEach(ds => getSubjectsForDate(ds).forEach(s => classesPresent.add(s.cls)));
+  let examParts = [];
+  if (classesPresent.has('XII')) examParts.push(document.getElementById('cfg-exam-name-xii')?.value?.trim() || 'AISSCE');
+  if (classesPresent.has('X')) examParts.push(document.getElementById('cfg-exam-name-x')?.value?.trim() || 'SSE');
+  const examName = examParts.length ? examParts.join('/') : 'AISSCE/SSE';
+  const yyyy = getExamYear();
+  const sessionStr = `${yyyy-1}-${String(yyyy).slice(2)}`;
+  const examTitle = `BANK QUESTION PAPER PACKETS OF ${examName.toUpperCase()} ${sessionStr}`;
 
   let sn = 0;
   let rows = '';
@@ -8582,8 +8583,8 @@ function printBankQPRegister() {
     <div style="padding:10mm 0 0 0;background:#fff;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
-          <tr><td colspan="10" style="text-align:center;padding:5px;font-weight:700;font-size:12pt;border:1px solid #000;">${centreName.toUpperCase()} (CENTER NO. ${centreCode})</td></tr>
-          <tr><td colspan="10" style="text-align:center;padding:4px;font-weight:700;font-size:10pt;border:1px solid #000;">BANK QUESTION PAPER PACKETS OF AISSCE/SSE 2025-26</td></tr>
+          <tr><td colspan="10" style="text-align:center;padding:5px;font-weight:700;font-size:12pt;border:1px solid #000;">${centreName.toUpperCase()} (CENTRE NO. ${centreCode})</td></tr>
+          <tr><td colspan="10" style="text-align:center;padding:4px;font-weight:700;font-size:10pt;border:1px solid #000;">${examTitle}</td></tr>
           <tr style="background:#1c3557;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
             <th style="border:1px solid #000;padding:5px 4px;width:4%;">SN</th>
             <th style="border:1px solid #000;padding:5px 4px;width:15%;">DATE</th>
@@ -10603,28 +10604,67 @@ function escapeHtmlLetterContent(text) {
 
 // ── Print just the report ──────────────────────────────────────
 function printInvReport() {
-  showInvStep(1);
-  const content = document.getElementById('inv-report-output')?.innerHTML;
+  const isStep2 = document.getElementById('inv-step-2').style.display !== 'none';
+  let content = '';
+  let title = "Invigilator Demand Report";
+
+  if (isStep2) {
+    title = "Invigilator Demand — Requirements Table";
+    const out = document.getElementById('inv-req-output');
+    if (!out) return;
+    
+    // Capture current input values as innerHTML won't reflect user changes
+    const clone = out.cloneNode(true);
+    const originalInputs = out.querySelectorAll('input');
+    const clonedInputs   = clone.querySelectorAll('input');
+    
+    clonedInputs.forEach((clonedInp, i) => {
+      const val = originalInputs[i].value || (clonedInp.type === 'number' ? '0' : '');
+      const span = document.createElement('span');
+      span.textContent = val;
+      if (clonedInp.classList.contains('inv-req-date-input')) {
+        span.style.display = 'block';
+        span.style.fontSize = '12px';
+        span.style.fontWeight = '700';
+        span.style.padding = '2px 0';
+      }
+      clonedInp.parentNode.replaceChild(span, clonedInp);
+    });
+    content = clone.innerHTML;
+  } else {
+    // Original behavior for Step 1
+    showInvStep(1);
+    title = "Invigilator Demand — School-wise Strength Report";
+    content = document.getElementById('inv-report-output')?.innerHTML;
+  }
+
   if (!content) { showModal('No Data','Generate the report first.'); return; }
+  
   const centreName = document.getElementById('cfg-centre-name')?.value || '';
-  const w = window.open('','_blank','width=1100,height=750');
-  w.document.write(`<!DOCTYPE html><html><head><title>Invigilator Demand Report</title>
+  const w = window.open('','_blank','width=1200,height=800');
+  w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
     <style>
-      body { font-family: Arial, sans-serif; padding: 20px; font-size: 11px; }
-      h2 { color: #0c1c35; }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #ccc; padding: 4px 8px; }
-      th { background: #0c1c35; color: #fff; }
-      tr:nth-child(even) { background: #f8fafc; }
-      @media print { button { display:none; } }
+      body { font-family: Arial, sans-serif; padding: 20px; font-size: 10.5px; color: #111; }
+      h2 { color: #0c1c35; margin-bottom: 4px; }
+      .centre-info { margin-bottom: 15px; color: #4b5563; font-size: 11px; }
+      table { border-collapse: collapse; width: 100%; table-layout: auto; }
+      th, td { border: 1px solid #999; padding: 5px 8px; }
+      th { background: #0c1c35; color: #fff; font-size: 9px; }
+      tr:nth-child(even) { background: #f9fafb; }
+      .table-wrap { overflow: visible; }
+      @media print { 
+        button { display:none; } 
+        body { padding: 0; }
+        @page { size: landscape; margin: 10mm; }
+      }
     </style></head><body>
-    <h2>Invigilator Demand — School-wise Report</h2>
-    <div style="margin-bottom:12px;color:#374151;">
+    <h2>${title}</h2>
+    <div class="centre-info">
       Centre: <strong>${centreName}</strong> · Exam: <strong>${getExamShort('X')} & ${getExamShort('XII')} ${getExamYear()}</strong>
     </div>
-    ${content}
+    <div class="table-wrap">${content}</div>
     <div style="margin-top:20px;text-align:right;color:#64748b;font-size:10px;">Generated: ${new Date().toLocaleString('en-IN')}</div>
-    <br><button onclick="window.print()">🖨️ Print</button>
+    <br><button onclick="window.print()" style="padding:8px 16px; cursor:pointer;">🖨️ Print Report</button>
     </body></html>`);
   w.document.close();
 }
