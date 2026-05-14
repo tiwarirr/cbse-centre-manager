@@ -578,7 +578,7 @@ tbody tr:last-child td { border-bottom: none; }
      ══════════════════════════════════════════════════════════ -->
 <div id="sidebar">
   <div class="sb-logo">
-    <div class="sb-logo-badge">CBSE 2026</div>
+    <div class="sb-logo-badge" id="sb-logo-badge">CBSE 2026</div>
     <div class="sb-title">Centre Management<br>System</div>
     <div class="sb-sub" id="sb-centre-info">No centre loaded</div>
   </div>
@@ -619,6 +619,10 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="sb-item" data-panel="datesheet" onclick="switchPanel('datesheet')">
       <span class="icon">📋</span>
       <span>Datesheet</span>
+    </div>
+    <div class="sb-item" data-panel="invigilator" onclick="switchPanel('invigilator')">
+      <span class="icon">🏫</span>
+      <span>Invigilator Demand</span>
     </div>
   </nav>
 
@@ -675,14 +679,14 @@ tbody tr:last-child td { border-bottom: none; }
           <input type="file" accept=".html,.htm" onchange="handleFileSelect(event,'12')">
           <div class="uz-icon">📋</div>
           <div class="uz-title">Class XII Candidates</div>
-          <div class="uz-sub">SENIOR SEC. CERT. EXAM 2026<br>Drop .html file or click to browse</div>
+          <div class="uz-sub">CBSE Class XII — Drop .html file or click to browse</div>
           <div class="uz-loaded" id="loaded-12">✅ File loaded</div>
         </div>
         <div class="upload-zone" id="zone-10" ondrop="handleDrop(event,'10')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
           <input type="file" accept=".html,.htm" onchange="handleFileSelect(event,'10')">
           <div class="uz-icon">📋</div>
           <div class="uz-title">Class X Candidates</div>
-          <div class="uz-sub">SECONDARY SCHOOL EXAM 2026<br>Drop .html file or click to browse</div>
+          <div class="uz-sub">CBSE Class X — Drop .html file or click to browse</div>
           <div class="uz-loaded" id="loaded-10">✅ File loaded</div>
         </div>
       </div>
@@ -852,6 +856,35 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
 
         <!-- ── DATESHEET & SUBJECT CODES CONFIG ─────────────────── -->
+                <!-- ── EXAM IDENTITY CONFIG ─────────────────── -->
+        <div class="config-card">
+          <h3>🎓 Exam Identity</h3>
+          <div class="form-row">
+            <label class="form-label">Exam Year</label>
+            <input type="number" class="form-control" id="cfg-exam-year" value="2026" min="2000" max="2099" style="width:110px;">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Class X Exam Name (short)</label>
+            <input type="text" class="form-control" id="cfg-exam-name-x" value="Secondary" placeholder="e.g. Secondary">
+            <div style="font-size:11px;color:#64748b;margin-top:3px;">Used in reports as: <em>Secondary-2026</em></div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Class XII Exam Name (short)</label>
+            <input type="text" class="form-control" id="cfg-exam-name-xii" value="Senior Secondary" placeholder="e.g. Senior Secondary">
+            <div style="font-size:11px;color:#64748b;margin-top:3px;">Used in reports as: <em>Senior Secondary-2026</em></div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Full Title — Class X</label>
+            <input type="text" class="form-control" id="cfg-exam-fullname-x" value="Secondary School Certificate Examination" placeholder="Full exam title">
+            <div style="font-size:11px;color:#64748b;margin-top:3px;">Used in attendance sheets &amp; Form-66</div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Full Title — Class XII</label>
+            <input type="text" class="form-control" id="cfg-exam-fullname-xii" value="Senior School Certificate Examination" placeholder="Full exam title">
+            <div style="font-size:11px;color:#64748b;margin-top:3px;">Used in attendance sheets &amp; Form-66</div>
+          </div>
+        </div>
+
         <div class="config-card" id="datesheet-config-card">
           <h3 style="cursor:pointer;user-select:none;" onclick="toggleDsConfig()">
             📅 Datesheet &amp; Subject Codes
@@ -935,6 +968,14 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="form-row">
             <label class="form-label">Centre code</label>
             <input type="text" class="form-control" id="cfg-centre-code" placeholder="e.g. 849205">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Centre Superintendent (CS) Name</label>
+            <input type="text" class="form-control" id="cfg-centre-head" placeholder="e.g. Dr. Ramesh Kumar">
+          </div>
+          <div class="form-row">
+            <label class="form-label">City / District</label>
+            <input type="text" class="form-control" id="cfg-centre-city" placeholder="e.g. Mainpuri, UP">
           </div>
           <div class="form-row">
             <label class="form-label">Colour theme</label>
@@ -1288,6 +1329,94 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+
+    <!-- ══ PANEL: INVIGILATOR DEMAND ══ -->
+    <div id="panel-invigilator" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Invigilator Demand</h2>
+          <div class="sub">School-wise report · Requirement input · Letter generation</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="printInvReport()">🖨️ Print Report</button>
+          <button class="btn btn-primary btn-sm" onclick="generateInvLetters()">📨 Generate Letters</button>
+        </div>
+      </div>
+
+      <!-- Step tabs -->
+      <div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;margin-bottom:20px;">
+        <button id="inv-tab-1" onclick="showInvStep(1)"
+          style="padding:8px 20px;border:none;border-bottom:3px solid #0c1c35;margin-bottom:-2px;background:none;font-weight:700;cursor:pointer;color:#0c1c35;font-size:13px;">
+          1 · School Report
+        </button>
+        <button id="inv-tab-2" onclick="showInvStep(2)"
+          style="padding:8px 20px;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;background:none;font-weight:400;cursor:pointer;color:#64748b;font-size:13px;">
+          2 · Requirements
+        </button>
+        <button id="inv-tab-3" onclick="showInvStep(3)"
+          style="padding:8px 20px;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;background:none;font-weight:400;cursor:pointer;color:#64748b;font-size:13px;">
+          3 · Letters
+        </button>
+      </div>
+
+      <!-- Step 1: School Report -->
+      <div id="inv-step-1">
+        <div class="alert" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;">
+          <span>ℹ️</span>
+          <div>This report shows <strong>date-wise, class &amp; subject-wise candidate count per school</strong>.
+          Use it to decide how many invigilators to demand from each school. Private candidates are shown for total strength accuracy but are excluded from Step 2 requirements.</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <select id="inv-filter-date" class="form-control" style="width:auto;" onchange="renderInvReport()">
+            <option value="all">All Dates</option>
+          </select>
+          <select id="inv-filter-class" class="form-control" style="width:auto;" onchange="renderInvReport()">
+            <option value="all">Both Classes</option>
+            <option value="X">Class X Only</option>
+            <option value="XII">Class XII Only</option>
+          </select>
+        </div>
+        <div id="inv-report-output"></div>
+      </div>
+
+      <!-- Step 2: Requirements -->
+      <div id="inv-step-2" style="display:none;">
+        <div class="alert" style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;">
+          <span>✏️</span>
+          <div>Enter the number of invigilators to demand from each school. The <strong>CS decides</strong> based on the school report above. Click <strong>Save Requirements</strong> when done.</div>
+        </div>
+        <div id="inv-req-output"></div>
+        <div style="margin-top:14px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="saveInvReq()">💾 Save Requirements</button>
+          <button class="btn btn-outline" onclick="showInvStep(1)">← Back to Report</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Letters Preview -->
+      <div id="inv-step-3" style="display:none;">
+        <div class="alert" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;">
+          <span>📨</span>
+          <div>Letters are generated for all schools with invigilator requirements set. Use <strong>Generate Letters</strong> to open the printable view. You can edit the template below before generating.</div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-weight:600;font-size:12px;color:#374151;display:block;margin-bottom:4px;">Letter Template</label>
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;">
+            Available placeholders: <code>{SCHOOL_NAME}</code> <code>{SCHOOL_CODE}</code> <code>{CENTRE_NAME}</code>
+            <code>{CENTRE_CODE}</code> <code>{EXAM_NAME}</code> <code>{EXAM_YEAR}</code> <code>{EXAM_SESSION}</code>
+            <code>{BOARD_EXAM_LABEL}</code> <code>{FIRST_DUTY_DATE}</code> <code>{TOTAL_INVIGILATORS_SUM}</code>
+            <code>{DUTY_DATES_TABLE}</code> <code>{CS_NAME}</code> <code>{CITY}</code> <code>{DATE_TODAY}</code>
+          </div>
+          <textarea id="inv-letter-template" rows="22"
+            style="width:100%;font-family:monospace;font-size:11px;border:1px solid #d1d5db;border-radius:6px;padding:8px;box-sizing:border-box;resize:vertical;line-height:1.6;"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="generateInvLetters()">📨 Generate All Letters</button>
+          <button class="btn btn-outline" onclick="resetInvTemplate()">↺ Reset Template</button>
+          <button class="btn btn-outline" onclick="showInvStep(2)">← Back to Requirements</button>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -1321,6 +1450,7 @@ const state = {
   seating:     {},
   // Per-date records
   dateStates:  {},   // ds → { status, split, classOrder, subjectOrder, seating, attendance, lockedAt, generatedAt }
+  invReq:      {},   // schoolCode → { required: N, notes: '' }
 };
 
 function defaultAnswerBookState() {
@@ -1561,6 +1691,7 @@ function saveToBrowser() {
 
     const payload = {
       globalCfg:    getConfig(),
+      invReq:       state.invReq || {},
       centreName,
       centreCode,
       candidates:   state.candidates,
@@ -1867,6 +1998,20 @@ function loadFromBrowser() {
       setChk('cfg-show-vacant',    g.showVacant);
       setChk('cfg-private',        g.inclPrivate);
       setChk('cfg-stagger',         g.stagger);
+      // Invigilator requirements
+      if (payload.invReq) state.invReq = payload.invReq;
+      // Centre head / city
+      if (payload.centreHead) document.getElementById('cfg-centre-head') && (document.getElementById('cfg-centre-head').value = payload.centreHead);
+      if (payload.centreCity) document.getElementById('cfg-centre-city') && (document.getElementById('cfg-centre-city').value = payload.centreCity);
+      // Exam identity fields
+      if (g.examYear)       setVal('cfg-exam-year',         g.examYear);
+      if (g.examNameX)      setVal('cfg-exam-name-x',       g.examNameX);
+      if (g.examNameXII)    setVal('cfg-exam-name-xii',     g.examNameXII);
+      if (g.examFullNameX)  setVal('cfg-exam-fullname-x',   g.examFullNameX);
+      if (g.examFullNameXII)setVal('cfg-exam-fullname-xii', g.examFullNameXII);
+      // Update sidebar badge to match restored exam year
+      const badge = document.getElementById('sb-logo-badge');
+      if (badge && g.examYear) badge.textContent = `CBSE ${g.examYear}`;
       // per-room handled below
     }
 
@@ -2317,8 +2462,35 @@ function getConfig() {
   const xiiDatesheet = readJSON('cfg-xii-datesheet');
   const xCodes       = readJSON('cfg-x-codes');
   const xiiCodes     = readJSON('cfg-xii-codes');
+  const examYear       = parseInt(document.getElementById('cfg-exam-year')?.value)      || new Date().getFullYear();
+  const examNameX      = document.getElementById('cfg-exam-name-x')?.value?.trim()      || 'Secondary';
+  const examNameXII    = document.getElementById('cfg-exam-name-xii')?.value?.trim()    || 'Senior Secondary';
+  const examFullNameX  = document.getElementById('cfg-exam-fullname-x')?.value?.trim()  || 'Secondary School Certificate Examination';
+  const examFullNameXII= document.getElementById('cfg-exam-fullname-xii')?.value?.trim()|| 'Senior School Certificate Examination';
   return { perRoom, rows, cols, classOrder, split, sepPlan, showVacant, inclPrivate, seatDir, stagger,
-           xDatesheet, xiiDatesheet, xCodes, xiiCodes };
+           xDatesheet, xiiDatesheet, xCodes, xiiCodes,
+           examYear, examNameX, examNameXII, examFullNameX, examFullNameXII };
+}
+
+// ── Exam identity helpers ──────────────────────────────────────────
+function getExamYear() {
+  return parseInt(document.getElementById('cfg-exam-year')?.value) || new Date().getFullYear();
+}
+function getExamShort(cls) {
+  const id = cls === 'XII' ? 'cfg-exam-name-xii' : 'cfg-exam-name-x';
+  return document.getElementById(id)?.value?.trim() || (cls === 'XII' ? 'Senior Secondary' : 'Secondary');
+}
+function getExamLabel(cls) {
+  return `${getExamShort(cls).toUpperCase()}-${getExamYear()}`;
+}
+function getExamFull(cls) {
+  const id = cls === 'XII' ? 'cfg-exam-fullname-xii' : 'cfg-exam-fullname-x';
+  return document.getElementById(id)?.value?.trim()
+    || (cls === 'XII' ? 'Senior School Certificate Examination' : 'Secondary School Certificate Examination');
+}
+function getExamFullUpper(cls) {
+  const full = getExamFull(cls).toUpperCase();
+  return full.includes('MAIN') ? full : full.replace('CERTIFICATE EXAMINATION', 'CERTIFICATE MAIN EXAMINATION');
 }
 
 // ── STAGGER HELPER ─────────────────────────────────────────────
@@ -2416,10 +2588,12 @@ function buildSeating(candidates, cfg, targetDate) {
     const dayAll = [...dayX, ...dayXII];
 
     if (cfg.split === 'subject') {
-      // Each class+subject gets its own contiguous block of rooms
+      // Each class+subject gets its own contiguous block of rooms.
+      // CRITICAL: each group must be seated independently with seatIndex
+      // resetting to 0 and its own roomOffset — otherwise seatInRoom wraps
+      // incorrectly and subjects bleed into each other's rooms.
       const classOrderedAll = cfg.classOrder === 'xii-first' ? [...dayXII,...dayX] : [...dayX,...dayXII];
-      const subjectGroups = []; const seenSubKeys = new Set();
-      // Order: custom if set, else larger groups first
+      const seenSubKeys = new Set();
       const splitCount = {};
       classOrderedAll.forEach(cand => {
         const sub = (cand.dateSubjects[ds]||[])[0];
@@ -2430,15 +2604,26 @@ function buildSeating(candidates, cfg, targetDate) {
         ? [...dsSplitOrder.filter(k => splitCount[k]),
            ...Object.keys(splitCount).filter(k => !dsSplitOrder.includes(k))]
         : Object.keys(splitCount).sort((a,b) => splitCount[b]-splitCount[a] || a.localeCompare(b));
+      const subjectGroups = [];
       splitKeys.forEach(key => {
-          const [cls,code] = key.split('|');
-          if (!seenSubKeys.has(key)) { seenSubKeys.add(key); subjectGroups.push({cls,code}); }
-        });
-      subjectGroups.forEach(sg => {
-        ordered.push(...dayAll
-          .filter(c => c.class===sg.cls && (c.dateSubjects[ds]||[])[0]?.code===sg.code)
-          .sort((a,b)=>a.roll.localeCompare(b.roll)));
+        const [cls,code] = key.split('|');
+        if (!seenSubKeys.has(key)) { seenSubKeys.add(key); subjectGroups.push({cls,code}); }
       });
+
+      // Seat each group independently, accumulating roomOffset across groups
+      let roomOffset = 0;
+      const allSeated = [];
+      subjectGroups.forEach(sg => {
+        const group = dayAll
+          .filter(c => c.class===sg.cls && (c.dateSubjects[ds]||[])[0]?.code===sg.code)
+          .sort((a,b) => a.roll.localeCompare(b.roll));
+        if (!group.length) return;
+        const seatedGroup = group.map((cand, si) => makeSeatedEntry(cand, ds, cfg, si, roomOffset));
+        allSeated.push(...seatedGroup);
+        roomOffset += Math.ceil(group.length / cfg.perRoom);
+      });
+      seating[ds] = allSeated;
+      return; // done for this date
     } else if (cfg.classOrder === 'x-first') {
       ordered = [...groupBySubject(dayX), ...groupBySubject(dayXII)];
     } else if (cfg.classOrder === 'xii-first') {
@@ -4294,24 +4479,30 @@ function renderAttSummary() {
 // ── DATESHEET PANEL ────────────────────────────────────────────
 
 function fillDatesheetPanel() {
-  const xBody  = document.getElementById('ds-x-tbody');
+  const xBody   = document.getElementById('ds-x-tbody');
   const xiiBody = document.getElementById('ds-xii-tbody');
-  xBody.innerHTML  = '';
+  xBody.innerHTML   = '';
   xiiBody.innerHTML = '';
 
-  sortDates(Object.keys(X_DATESHEET)).forEach(ds => {
-    const codes = X_DATESHEET[ds];
+  // Always use active (imported) datesheet + codes, not hardcoded constants
+  const xDS    = getActiveDatesheet('X');
+  const xiiDS  = getActiveDatesheet('XII');
+  const xCodes = getActiveCodes('X');
+  const xiiCodes = getActiveCodes('XII');
+
+  sortDates(Object.keys(xDS)).forEach(ds => {
+    const codes = xDS[ds];
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><strong>${ds}</strong><br><small style="color:var(--muted);font-family:"DM Mono",monospace;font-size:10px">${dayName(ds)}</small></td>
-      <td>${codes.map(c => `<span class="tag tag-green" style="margin:1px 2px">${c} ${X_CODES[c]||c}</span>`).join('')}</td>`;
+    tr.innerHTML = `<td><strong>${ds}</strong><br><small style="color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">${dayName(ds)}</small></td>
+      <td>${codes.map(c => `<span class="tag tag-green" style="margin:1px 2px">${c} ${xCodes[c]||c}</span>`).join('')}</td>`;
     xBody.appendChild(tr);
   });
 
-  sortDates(Object.keys(XII_DATESHEET)).forEach(ds => {
-    const codes = XII_DATESHEET[ds];
+  sortDates(Object.keys(xiiDS)).forEach(ds => {
+    const codes = xiiDS[ds];
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><strong>${ds}</strong><br><small style="color:var(--muted);font-family:"DM Mono",monospace;font-size:10px">${dayName(ds)}</small></td>
-      <td>${codes.map(c => `<span class="tag tag-blue" style="margin:1px 2px">${c} ${XII_CODES[c]||c}</span>`).join('')}</td>`;
+    tr.innerHTML = `<td><strong>${ds}</strong><br><small style="color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">${dayName(ds)}</small></td>
+      <td>${codes.map(c => `<span class="tag tag-blue" style="margin:1px 2px">${c} ${xiiCodes[c]||c}</span>`).join('')}</td>`;
     xiiBody.appendChild(tr);
   });
 }
@@ -4555,7 +4746,7 @@ function exportAttendanceExcel() {
   XLSX.utils.book_append_sheet(wb, ws3, 'Summary');
 
   // ── Write file ──
-  const fname = `Attendance_Register_${centreCode}_${new Date().getFullYear()}.xlsx`;
+  const fname = `Attendance_Register_${centreCode}_${getExamYear()}.xlsx`;
   XLSX.writeFile(wb, fname);
 }
 
@@ -4772,6 +4963,7 @@ const PRINT_REPORT_REGISTRY = {
   attendanceXII:  { overlayId: 'attsheet-overlay-XII',  styleId: 'attsheet-style-XII',  pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
   century:        { overlayId: 'century-overlay',       styleId: 'century-print-style', pageSize: 'A4', orientation: 'portrait',  margins: '10mm 12mm 10mm 12mm' },
   displayPlan:    { overlayId: 'display-plan-overlay',  styleId: 'display-plan-style',  pageSize: 'A4', orientation: 'portrait',  margins: '8mm 10mm 8mm 10mm' },
+  invLetters:     { overlayId: 'inv-letters-overlay',   styleId: 'inv-letters-style',   pageSize: 'A4', orientation: 'portrait',  margins: '20mm 18mm 20mm 25mm' },
   triplicate:     { overlayId: 'triplicate-overlay',    styleId: 'triplicate-print-style', pageSize: 'A4', orientation: 'portrait', margins: '8mm 12mm 8mm 12mm' },
   qpStatement:    { overlayId: 'qp-stmt-overlay',       styleId: 'qp-stmt-style',       pageSize: 'A4', orientation: 'portrait',  margins: '20mm' },
   qpRegister:     { overlayId: 'qp-reg-overlay',        styleId: 'qp-reg-style',        pageSize: 'A4', orientation: 'landscape', margins: '10mm 12mm' },
@@ -4791,6 +4983,7 @@ function _printDebug(msg, payload) {
 function buildPrintShellCSS({ overlayId, pageSize, orientation, margins }) {
   return `
     @media print {
+      body { background: #fff !important; }
       body > *:not(#${overlayId}) { display:none!important; }
       #${overlayId} .no-print { display:none!important; }
       #${overlayId} {
@@ -4799,6 +4992,10 @@ function buildPrintShellCSS({ overlayId, pageSize, orientation, margins }) {
         overflow:visible!important;
         -webkit-print-color-adjust:exact;
         print-color-adjust:exact;
+      }
+      #${overlayId} > div:not(.no-print) {
+        background:#fff!important;
+        padding:0!important;
       }
       @page { size:${pageSize || 'A4'} ${orientation || 'portrait'}; margin:${margins || '10mm'}; }
       thead { display:table-header-group; }
@@ -4847,7 +5044,39 @@ function beginPrintSession({ reportKey, overlayId, styleId, pageSize, orientatio
   clearPrintArtifacts();
   document.getElementById(resolved.overlayId)?.remove();
   document.getElementById(resolved.styleId)?.remove();
-  if (beforePrint || afterPrint) registerPrintHooks(resolved.reportKey, beforePrint, afterPrint);
+
+  // Auto-wire global beforeprint/afterprint to strip overlay background/padding/scrollbar
+  // that causes the grey bar on every print. Callers can pass their own hooks too.
+  const oid = resolved.overlayId;
+  const _globalBefore = () => {
+    const el = document.getElementById(oid);
+    if (!el) return;
+    el._savedStyle = el.style.cssText;
+    el.style.cssText = 'position:static;background:#fff;overflow:visible;';
+    // Also strip padding from immediate non-toolbar child wrapper divs
+    Array.from(el.children).forEach(child => {
+      if (child.classList.contains('no-print')) return;
+      child._savedStyle = child.style.cssText;
+      child.style.cssText = (child.style.cssText || '').replace(/padding:[^;]+;?/gi,'') + ';padding:0;background:#fff;';
+    });
+    if (beforePrint) beforePrint();
+  };
+  const _globalAfter = () => {
+    const el = document.getElementById(oid);
+    if (!el) return;
+    if (el._savedStyle !== undefined) el.style.cssText = el._savedStyle;
+    Array.from(el.children).forEach(child => {
+      if (child.classList.contains('no-print')) return;
+      if (child._savedStyle !== undefined) child.style.cssText = child._savedStyle;
+    });
+    if (afterPrint) afterPrint();
+  };
+  window.addEventListener('beforeprint', _globalBefore);
+  window.addEventListener('afterprint',  _globalAfter);
+  // Store on resolved so endPrintSession can remove them
+  resolved._globalBefore = _globalBefore;
+  resolved._globalAfter  = _globalAfter;
+
   PRINT_RUNTIME.active = resolved;
   _printDebug('begin-session', resolved);
   return resolved;
@@ -4859,7 +5088,18 @@ function endPrintSession({ reportKey, overlayId, styleId } = {}) {
   const oid = overlayId || active.overlayId || meta.overlayId;
   const sid = styleId || active.styleId || meta.styleId;
   const key = reportKey || active.reportKey;
-  if (oid) document.getElementById(oid)?.remove();
+  // Remove global beforeprint/afterprint hooks registered by beginPrintSession
+  if (active._globalBefore) window.removeEventListener('beforeprint', active._globalBefore);
+  if (active._globalAfter)  window.removeEventListener('afterprint',  active._globalAfter);
+  // Also remove any element-level hooks (displayPlan registers these directly)
+  if (oid) {
+    const el = document.getElementById(oid);
+    if (el) {
+      if (el._dpBefore) window.removeEventListener('beforeprint', el._dpBefore);
+      if (el._dpAfter)  window.removeEventListener('afterprint',  el._dpAfter);
+    }
+    el?.remove();
+  }
   if (sid) document.getElementById(sid)?.remove();
   if (key) clearPrintHooks(key);
   if (PRINT_RUNTIME.active && ((!oid || PRINT_RUNTIME.active.overlayId === oid) || (!sid || PRINT_RUNTIME.active.styleId === sid))) {
@@ -4899,9 +5139,7 @@ function printAppendixE(cls) {
     return;
   }
 
-  const examLabel = cls === 'XII'
-    ? 'Senior School Certificate Examination'
-    : 'Secondary School Certificate Examination';
+  const examLabel = getExamFull(cls);
 
   // ── For each candidate, determine all dates they are registered for ──
   // and whether they were absent (A) or not (P / unmarked = treat as P)
@@ -5030,7 +5268,7 @@ function printAppendixE(cls) {
       <div style="font-size:9pt;"><b>Centre Name:</b> ${centreName}</div>
     </div>
     <div style="text-align:center;margin-bottom:4pt;">
-      <div style="font-size:10pt;font-weight:bold;">${examLabel}, ${new Date().getFullYear()}</div>
+      <div style="font-size:10pt;font-weight:bold;">${examLabel}, ${getExamYear()}</div>
       <div style="font-size:10pt;font-weight:bold;">Consolidated Absentee Statement (Theory Papers only)</div>
     </div>
 
@@ -5113,7 +5351,7 @@ function printAppendixE(cls) {
 
   overlay = document.createElement('div');
   overlay.id = overlayId;
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
   overlay.innerHTML = `
     <div class="no-print" style="position:sticky;top:0;background:#0c1c35;color:#fff;
       z-index:10001;padding:10px 20px;display:flex;align-items:center;
@@ -5129,7 +5367,7 @@ function printAppendixE(cls) {
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:20px;">${html}</div>`;
+    <div style="padding:10mm 0 0 0;background:#fff;">${html}</div>`;
 
   document.body.appendChild(overlay);
 }
@@ -5285,7 +5523,7 @@ function printSeatSlips() {
 
   overlay = document.createElement('div');
   overlay.id = overlayId;
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
 
   // Checkbox helper
   const chk = (id, label, checked=true) =>
@@ -5312,7 +5550,7 @@ function printSeatSlips() {
         <button onclick="closePrintSession('${session.reportKey}','${overlayId}','${styleId}')" style="background:#6b7280;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:20px;display:flex;flex-direction:column;gap:20px;" id="slips-pages">${buildPages(getOpts())}</div>`;
+    <div style="padding:10mm 0 0 0;background:#fff;display:flex;flex-direction:column;gap:20px;" id="slips-pages">${buildPages(getOpts())}</div>`;
 
   // Expose helpers for live re-render on checkbox change
   window._getSlipOpts  = getOpts;
@@ -5466,8 +5704,7 @@ function printRoomSummary() {
       <div style="margin-bottom:10pt;">
         CCTV Duty:......................................................................................................................................................................................................................................
       </div>
-      <div style="display:flex;justify-content:space-between;margin-top:20pt;">
-        <div>Prepared by: _______________________</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:40pt;">
         <div>Signature of Centre Superintendent</div>
       </div>
     </div>
@@ -5494,7 +5731,7 @@ function printRoomSummary() {
 
   overlay = document.createElement('div');
   overlay.id = 'summary-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
   overlay.innerHTML = `
     <div class="no-print" style="position:sticky;top:0;background:#0c1c35;color:#fff;
       z-index:10001;padding:10px 20px;display:flex;align-items:center;
@@ -5510,7 +5747,7 @@ function printRoomSummary() {
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:20px;">${html}</div>`;
+    <div style="padding:10mm 0 0 0;background:#fff;">${html}</div>`;
 
   document.body.appendChild(overlay);
 }
@@ -5619,8 +5856,8 @@ function printCentreMemo() {
     });
 
     const classTitle  = cls === 'XII'
-      ? 'SENIOR SECONDARY SCHOOL CERTIFICATE MAIN EXAMINATION'
-      : 'SECONDARY SCHOOL CERTIFICATE MAIN EXAMINATION';
+      ? getExamFullUpper('XII')
+      : getExamFullUpper('X');
     const subjectDesc = `${sub.code}-${sub.name.toUpperCase()}`;
     const batches     = consecutiveBatches(subCands);
 
@@ -5767,7 +6004,7 @@ function printCentreMemo() {
 
   overlay = document.createElement('div');
   overlay.id = 'memo-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
   overlay.innerHTML = `
     <div class="no-print" style="position:sticky;top:0;background:#0c1c35;color:#fff;
       z-index:10001;padding:10px 20px;display:flex;align-items:center;
@@ -5783,7 +6020,7 @@ function printCentreMemo() {
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:20px;background:#e5e7eb;">${allPages}</div>`;
+    <div style="padding:10mm 0 0 0;background:#fff;">${allPages}</div>`;
 
   document.body.appendChild(overlay);
 }
@@ -6097,7 +6334,7 @@ function printForm66() {
 
   overlay = document.createElement('div');
   overlay.id = 'form66-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
   overlay.innerHTML = `
     <div class="no-print" style="position:sticky;top:0;background:#0c1c35;color:#fff;
       z-index:10001;padding:10px 20px;display:flex;align-items:center;
@@ -6113,7 +6350,7 @@ function printForm66() {
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:20px;">${pages}</div>`;
+    <div style="padding:10mm 0 0 0;background:#fff;">${pages}</div>`;
 
   document.body.appendChild(overlay);
 }
@@ -6160,9 +6397,7 @@ function printAttendanceSheet(cls) {
 
   // ── Pagination: 20 rows per page ──
   const ROWS_PER_PAGE = 20;
-  const examTitle = cls === 'XII'
-    ? 'SENIOR SECONDARY SCH CERT EXAM.'
-    : 'SECONDARY SCH CERT EXAM.';
+  const examTitle = getExamShort(cls).toUpperCase() + ' SCH CERT EXAM.';
 
   // ── Build column headers: code + date in bracket ──
   // Format: 041 (17-Feb)
@@ -6251,7 +6486,7 @@ function printAttendanceSheet(cls) {
 
       <!-- Header -->
       <div style="text-align:center;font-size:8.5pt;font-weight:bold;margin-bottom:3pt;line-height:1.4;">
-        ${examTitle} ${new Date().getFullYear()} — CENTRE/ROLL NO WISE CONSOLIDATED ATTENDANCE SHEET<br>
+        ${examTitle} ${getExamYear()} — CENTRE/ROLL NO WISE CONSOLIDATED ATTENDANCE SHEET<br>
         <span style="font-weight:normal;">CENTRE : ${centreCode} — ${centreName.toUpperCase()}</span>
         &nbsp;&nbsp;|&nbsp;&nbsp; CLASS : ${cls}
         &nbsp;&nbsp;|&nbsp;&nbsp; Page ${p+1} of ${totalPages}
@@ -6306,7 +6541,7 @@ function printAttendanceSheet(cls) {
 
   overlay = document.createElement('div');
   overlay.id = overlayId;
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
   overlay.innerHTML = `
     <div class="no-print" style="position:sticky;top:0;background:#0c1c35;color:#fff;
       z-index:10001;padding:10px 20px;display:flex;align-items:center;
@@ -6322,7 +6557,7 @@ function printAttendanceSheet(cls) {
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:16px;">${pages}</div>`;
+    <div style="padding:10mm 0 0 0;background:#fff;">${pages}</div>`;
 
   document.body.appendChild(overlay);
 }
@@ -6569,7 +6804,7 @@ function printCenturySeries() {
 
   overlay = document.createElement('div');
   overlay.id = 'century-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
   overlay.innerHTML = `
     <div class="no-print" style="position:sticky;top:0;background:#0c1c35;color:#fff;
       z-index:10001;padding:10px 20px;display:flex;align-items:center;
@@ -6585,7 +6820,7 @@ function printCenturySeries() {
           padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:20px;">${pages}</div>`;
+    <div style="padding:10mm 0 0 0;background:#fff;">${pages}</div>`;
 
   document.body.appendChild(overlay);
 }
@@ -6623,6 +6858,17 @@ function printDisplayPlan() {
       .dp-xcell, .dp-roll, .dp-vacant, .dp-colh {
         -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
       }
+      @media print {
+        #display-plan-overlay {
+          overflow:hidden!important;
+          scrollbar-width:none!important;
+        }
+        #display-plan-overlay::-webkit-scrollbar { display:none!important; width:0!important; }
+        #display-plan-overlay > div:not(.no-print) {
+          padding:0!important;
+          background:transparent!important;
+        }
+      }
     .dp { width:180mm;margin:0 auto;font-family:Arial,sans-serif;box-sizing:border-box; }
     .dp-grid  { width:100%;border-collapse:collapse;table-layout:fixed; }
     .dp-colh  { border:1.5px solid #000;padding:6px 4px;text-align:center;
@@ -6650,7 +6896,23 @@ function printDisplayPlan() {
   document.getElementById(overlayId)?.remove();
   const overlay = document.createElement('div');
   overlay.id = overlayId;
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
+
+  // Use JS beforeprint/afterprint to strip ALL background/padding that causes the grey bar.
+  // CSS @media print is unreliable for inline styles in Chrome.
+  const _dpBefore = () => {
+    overlay.style.cssText = 'position:static;background:#fff;overflow:visible;';
+    wrap.style.cssText = 'padding:0;background:#fff;';
+  };
+  const _dpAfter = () => {
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
+    wrap.style.cssText = 'padding:10mm 0 0 0;background:#fff;';
+  };
+  window.addEventListener('beforeprint', _dpBefore);
+  window.addEventListener('afterprint',  _dpAfter);
+  // Store cleanup refs so closePrintSession can remove them
+  overlay._dpBefore = _dpBefore;
+  overlay._dpAfter  = _dpAfter;
 
   const toolbar = document.createElement('div');
   toolbar.className = 'no-print';
@@ -6668,7 +6930,7 @@ function printDisplayPlan() {
   overlay.appendChild(toolbar);
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'padding:16px;';
+  wrap.style.cssText = 'padding:10mm 0 0 0;background:#fff;';
   const frag = document.createDocumentFragment();
 
   roomNos.forEach(roomNo => {
@@ -6686,7 +6948,7 @@ function printDisplayPlan() {
     });
 
     const subHeaderRows = combos.map(({cls, sub}) => {
-      const cl = cls === 'XII' ? 'SENIOR SECONDARY-2026' : 'SECONDARY-2026';
+      const cl = getExamLabel(cls);
       return `<tr>
         <td style="border:none;padding:3pt 0;font-size:16pt;font-weight:bold;color:#000;width:50%;">${cl}</td>
         <td style="border:none;padding:3pt 0;font-size:16pt;font-weight:bold;color:#000;text-align:right;width:50%;">Sub: ${sub.code}-${sub.name.toUpperCase()}</td>
@@ -6768,90 +7030,72 @@ function printDisplayPlan() {
 // Format 2: printSeatingSubjectSummary()— one page per class+subject combo
 
 function _summaryHeaderHTML(centreName, centreCode, dayStr, classLabel, subjectLine, examLine, totalCols) {
-  // Returns <tr> rows for <thead> — repeat on every page
-  // totalCols must match the data table column count exactly
-  const W  = 'background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;';
-  const BW = `border:1px solid #000;${W}`;
-  const CS = `colspan="${totalCols}"`;
+  // Wall/board display header — centred, bold, large for distant reading
+  const CS  = `colspan="${totalCols}"`;
+  const BASE = 'border:1.5px solid #000;background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;';
+  const C   = `${BASE}text-align:center;`;
 
-  const classRow = classLabel
-    ? `<tr><td ${CS} style="font-size:11pt;font-weight:bold;padding:2pt 6pt;text-align:center;${BW}">CLASS- ${classLabel}</td></tr>` : '';
+  const examDisplay = examLine || (classLabel
+    ? (classLabel.includes('SENIOR') ? getExamLabel('XII') : getExamLabel('X'))
+    : '');
 
-  const examRow = (examLine || classLabel)
-    ? `<tr><td ${CS} style="font-size:10pt;font-weight:bold;padding:2pt 6pt;text-align:center;${BW}">${examLine || (classLabel.includes('SENIOR') ? 'SENIOR SECONDARY-2026' : 'SECONDARY-2026')}</td></tr>` : '';
-
-  // Subject + Centre No row: left cell spans all-but-1, right cell 1 col
   const subjectRow = subjectLine
-    ? `<tr>
-        <td colspan="${totalCols-1}" style="font-size:10pt;font-weight:bold;padding:4pt 6pt;${BW}">${subjectLine}</td>
-        <td style="font-size:10pt;font-weight:bold;padding:4pt 6pt;text-align:right;${BW}">Centre No.: ${centreCode}</td>
-      </tr>`
-    : `<tr>
-        <td colspan="${totalCols-1}" style="font-size:10pt;padding:3pt 6pt;${BW}"></td>
-        <td style="font-size:10pt;font-weight:bold;padding:3pt 6pt;text-align:right;${BW}">Centre No.: ${centreCode}</td>
-      </tr>`;
+    ? `<tr><td ${CS} style="${C}font-size:12pt;font-weight:bold;padding:3pt 6pt;letter-spacing:0.5px;">${subjectLine}</td></tr>`
+    : '';
 
-  // Day & Date row: label left, value right
-  const dayRow = `<tr>
-    <td colspan="${totalCols-1}" style="font-size:10pt;padding:3pt 6pt;${BW}"><b>Day &amp; Date:</b>&nbsp; ${dayStr}</td>
-    <td style="font-size:10pt;padding:3pt 6pt;text-align:right;${BW}"></td>
-  </tr>`;
-
-  // Or better: Day & Date full width, then separate subject/code row
   return `
-    <tr><td ${CS} style="font-size:13pt;font-weight:bold;text-align:center;padding:5pt 6pt;${BW}">${centreName}</td></tr>
-    <tr><td ${CS} style="font-size:12pt;font-weight:bold;text-align:center;letter-spacing:1px;padding:2pt 6pt;${BW}">SEATING ARRANGEMENT</td></tr>
-    ${classRow}
-    <tr>
-      <td style="font-size:10pt;padding:3pt 6pt;${BW}"><b>Day &amp; Date:</b></td>
-      <td colspan="${totalCols-1}" style="font-size:10pt;padding:3pt 6pt;text-align:right;${BW}">${dayStr}</td>
-    </tr>
-    <tr><td ${CS} style="font-size:10pt;padding:3pt 6pt;${BW}"><b>Name of Centre :</b>&nbsp; ${centreName}</td></tr>
-    ${examRow}
-    ${subjectRow}`;
+    <tr><td ${CS} style="${C}font-size:15pt;font-weight:bold;padding:4pt 8pt;letter-spacing:0.5px;">${centreName}</td></tr>
+    <tr><td ${CS} style="${C}font-size:13pt;font-weight:bold;padding:3pt 8pt;letter-spacing:2px;text-decoration:underline;">SEATING ARRANGEMENT</td></tr>
+    ${examDisplay ? `<tr><td ${CS} style="${C}font-size:11pt;font-weight:bold;padding:2pt 8pt;">${examDisplay}</td></tr>` : ''}
+    ${subjectRow}
+    <tr><td ${CS} style="${C}font-size:13pt;font-weight:bold;padding:4pt 8pt;border-top:2px solid #000;">${dayStr}</td></tr>
+    <tr><td ${CS} style="${C}font-size:11pt;font-weight:bold;padding:2pt 8pt;border-bottom:2px solid #000;">Centre No. : ${centreCode}</td></tr>`;
 }
 
 
 function _summaryTableHTML(headerRows, rows, grandTotal, showSubjectCol) {
-  const TH  = 'border:1.5px solid #000;padding:12px 9px;text-align:center;font-size:24pt;font-weight:bold;background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;';
-  const TH2 = 'border:1.5px solid #000;padding:12px 9px;text-align:center;font-size:24pt;font-weight:bold;background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;';
-  const totalCols  = showSubjectCol ? 5 : 4;
-  const subColH    = showSubjectCol ? `<td rowspan="2" style="${TH}vertical-align:middle;">Subject</td>` : '';
-  const sumSubCell = showSubjectCol ? `<td style="border:1.5px solid #000;padding:18px 12px;"></td>` : '';
+  // Wall/board display table — large bold fonts, alternating shading, clear structure
+  const totalCols = showSubjectCol ? 5 : 4;
+  const PA  = 'print-color-adjust:exact;-webkit-print-color-adjust:exact;';
+  const TH  = `border:1.5px solid #000;padding:8px 8px;text-align:center;font-size:13pt;font-weight:bold;background:#fff;color:#000;${PA}`;
+  const TH2 = `border:1.5px solid #000;padding:8px 8px;text-align:center;font-size:12pt;font-weight:bold;background:#fff;color:#000;${PA}`;
+
+  // Column widths: Room | [Subject] | From | To | Total
+  const colgroupHtml = showSubjectCol
+    ? `<colgroup><col style="width:52pt"><col><col style="width:110pt"><col style="width:110pt"><col style="width:44pt"></colgroup>`
+    : `<colgroup><col style="width:56pt"><col style="width:120pt"><col style="width:120pt"><col style="width:48pt"></colgroup>`;
+
+  const subColH = showSubjectCol
+    ? `<td rowspan="2" style="${TH}vertical-align:middle;font-size:10pt;letter-spacing:0.3px;">SUBJECT</td>` : '';
+  const sumSubCell = showSubjectCol
+    ? `<td style="border:1.5px solid #000;padding:8px 8px;background:#fff;${PA}"></td>` : '';
 
   const colHdrRows = `
     <tr>
-      <td rowspan="2" style="${TH}vertical-align:middle;">Room No.</td>
+      <td rowspan="2" style="${TH}vertical-align:middle;font-size:11pt;">ROOM<br>NO.</td>
       ${subColH}
-      <td colspan="3" style="${TH}">Roll No.</td>
+      <td colspan="3" style="${TH}font-size:11pt;letter-spacing:1px;">ROLL NUMBER</td>
     </tr>
     <tr>
-      <td style="${TH2}">From</td>
-      <td style="${TH2}">To</td>
-      <td style="${TH2}">Total</td>
+      <td style="${TH2}">FROM</td>
+      <td style="${TH2}">TO</td>
+      <td style="${TH2}">TOTAL</td>
     </tr>`;
 
   const totalRow = `
-  <div style="page-break-inside:avoid;page-break-before:avoid;">
-    <table style="width:100%;border-collapse:collapse;">
-      <tr style="background:#f0f0f0;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:9pt;"></td>
-        ${sumSubCell}
-        <td colspan="2" style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;">Total:</td>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-weight:bold;font-size:24pt;">${grandTotal}</td>
-      </tr>
-    </table>
-  </div>`;
+  <table style="width:100%;border-collapse:collapse;${PA}">
+    <tr style="background:#fff;${PA}">
+      <td style="border:1.5px solid #000;padding:10px 8px;text-align:center;font-size:14pt;font-weight:bold;color:#000;${PA}"></td>
+      ${sumSubCell ? `<td style="border:1.5px solid #000;padding:10px 8px;background:#fff;${PA}"></td>` : ''}
+      <td colspan="2" style="border:1.5px solid #000;padding:10px 8px;text-align:center;font-size:16pt;font-weight:bold;color:#000;letter-spacing:1px;${PA}">GRAND TOTAL</td>
+      <td style="border:1.5px solid #000;padding:10px 8px;text-align:center;font-size:20pt;font-weight:bold;color:#000;${PA}">${grandTotal}</td>
+    </tr>
+  </table>`;
 
-  // Header table: page-break-after:avoid glues it to the data table below
-  // Data table: free to paginate normally
   return `
-    <div style="page-break-inside:avoid;page-break-after:avoid;">
-      <table style="width:100%;border-collapse:collapse;">
-        <tbody>${headerRows}${colHdrRows}</tbody>
-      </table>
-    </div>
-    <table style="width:100%;border-collapse:collapse;">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;border:2px solid #000;">
+      ${colgroupHtml}
+      <thead>${headerRows}${colHdrRows}</thead>
       <tbody>${rows}</tbody>
     </table>
     ${totalRow}`;
@@ -6895,13 +7139,16 @@ function printSeatingSummary() {
       grandTotal += total;
       if (!seenRooms.has(roomNo)) { seenRooms.add(roomNo); grandRooms++; }
 
-      const subLabel = `${sub.code}-${sub.name.toUpperCase()}`;
-      rows += `<tr>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;">${ci===0?roomNo:''}</td>
-        <td style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-size:10pt;">${subLabel}</td>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;font-family:'Courier New',monospace;">${from}</td>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;font-family:'Courier New',monospace;">${to}</td>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;">${total}</td>
+      const subLabel = `${sub.code} ${sub.name.toUpperCase()}`;
+      const PA5 = 'print-color-adjust:exact;-webkit-print-color-adjust:exact;';
+      const rowBg = '#ffffff'; // always white
+      const rowBgActual = '#ffffff'; // always white
+      rows += `<tr style="background:${rowBgActual};${PA5}">
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:18pt;font-weight:bold;${PA5}">${ci===0?roomNo:''}</td>
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:12pt;font-weight:bold;word-break:break-word;line-height:1.25;${PA5}">${subLabel}</td>
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:18pt;font-weight:bold;font-family:'Courier New',monospace;letter-spacing:0.5px;${PA5}">${from}</td>
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:18pt;font-weight:bold;font-family:'Courier New',monospace;letter-spacing:0.5px;${PA5}">${to}</td>
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:18pt;font-weight:bold;${PA5}">${total}</td>
       </tr>`;
     });
   });
@@ -6909,8 +7156,8 @@ function printSeatingSummary() {
   // Build exam line from classes present this date
   const classesPresent = [...new Set(seated.map(s=>s.class))].sort();
   const examParts = [];
-  if (classesPresent.includes('X'))   examParts.push('SECONDARY-2026');
-  if (classesPresent.includes('XII')) examParts.push('SENIOR SECONDARY-2026');
+  if (classesPresent.includes('X'))   examParts.push(getExamLabel('X'));
+  if (classesPresent.includes('XII')) examParts.push(getExamLabel('XII'));
   const examLine = examParts.join(' / ');
   const headerRows = _summaryHeaderHTML(centreName, centreCode, dayStr, '', '', examLine, 5);
   const tableHTML  = _summaryTableHTML(headerRows, rows, grandTotal, true);
@@ -6945,7 +7192,7 @@ function printSeatingSubjectSummary() {
   let pages = '';
   allCombos.forEach(({cls, sub}) => {
     const classLabel = cls==='XII' ? 'SENIOR SECONDARY' : 'X';
-    const classFullLabel = cls==='XII' ? 'SENIOR SECONDARY-2026' : 'SECONDARY-2026';
+    const classFullLabel = getExamLabel(cls);
     const subjectLine = `Subject : ${sub.code}-${sub.name.toUpperCase()}`;
 
     let rows = '';
@@ -6961,12 +7208,13 @@ function printSeatingSubjectSummary() {
       const rolls = cands.map(s=>parseInt(s.roll)).sort((a,b)=>a-b);
       const from=rolls[0], to=rolls[rolls.length-1], total=rolls.length;
       grandTotal += total;
-      const subLabel = `${sub.code}-${sub.name.toUpperCase()}`;
-      rows += `<tr>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;">${roomNo}</td>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;font-family:'Courier New',monospace;">${from}</td>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;font-family:'Courier New',monospace;">${to}</td>
-        <td style="border:1.5px solid #000;padding:18px 12px;text-align:center;font-size:24pt;font-weight:bold;">${total}</td>
+      const PA4 = 'print-color-adjust:exact;-webkit-print-color-adjust:exact;';
+      const rowBg4 = '#ffffff';
+      rows += `<tr style="background:${rowBg4};${PA4}">
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:20pt;font-weight:bold;${PA4}">${roomNo}</td>
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:20pt;font-weight:bold;font-family:'Courier New',monospace;letter-spacing:0.5px;${PA4}">${from}</td>
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:20pt;font-weight:bold;font-family:'Courier New',monospace;letter-spacing:0.5px;${PA4}">${to}</td>
+        <td style="border:1.5px solid #000;padding:10px 10px;text-align:center;font-size:20pt;font-weight:bold;${PA4}">${total}</td>
       </tr>`;
     });
 
@@ -6980,11 +7228,12 @@ function printSeatingSubjectSummary() {
 }
 
 function _summaryFooter() {
-  return `<table style="width:100%;border-collapse:collapse;margin-top:20pt;"><tr>
-    <td style="width:60%;"></td>
-    <td style="text-align:center;border-top:1.5px solid #000;padding-top:4pt;font-size:9.5pt;font-weight:bold;">
+  return `<table style="width:100%;border-collapse:collapse;margin-top:40pt;"><tr>
+    <td style="width:55%;padding-top:8pt;font-size:8pt;color:#333;">
+    </td>
+    <td style="text-align:center;border-top:1.5px solid #000;padding-top:4pt;font-size:11pt;font-weight:bold;">
       Signature of Centre Superintendent<br>
-      <span style="font-size:8pt;font-weight:normal;">(with Rubber Stamp)</span>
+      <span style="font-size:9pt;font-weight:normal;">(with Rubber Stamp)</span>
     </td>
   </tr></table>`;
 }
@@ -6996,7 +7245,7 @@ function _showSummaryOverlay(overlayId, styleId, title, pagesHTML) {
     styleId,
     pageSize: 'A4',
     orientation: 'portrait',
-    margins: '10mm'
+    margins: '8mm 10mm'
   });
   document.getElementById(styleId)?.remove();
   const style = document.createElement('style');
@@ -7010,14 +7259,18 @@ function _showSummaryOverlay(overlayId, styleId, title, pagesHTML) {
     .sp-sum { page-break-after:always; }
     .sp-sum:last-child { page-break-after:avoid; }
     .sp-sum table { -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important; }
-    .sp-sum { width:190mm;margin:0 auto;font-family:Arial,sans-serif;box-sizing:border-box; }
+    .sp-sum table thead tr th, .sp-sum table thead tr td {
+      -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
+    }
+    .sp-sum { width:185mm;margin:0 auto;font-family:Arial,sans-serif;box-sizing:border-box; }
+    @media print { .sp-sum { width:100%; margin:0; } }
   `;
   document.head.appendChild(style);
 
   document.getElementById(overlayId)?.remove();
   const overlay = document.createElement('div');
   overlay.id = overlayId;
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
 
   const toolbar = document.createElement('div');
   toolbar.className = 'no-print';
@@ -7035,7 +7288,7 @@ function _showSummaryOverlay(overlayId, styleId, title, pagesHTML) {
   overlay.appendChild(toolbar);
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'padding:20px;';
+  wrap.style.cssText = 'padding:10mm 0 0 0;background:#fff;';
   wrap.innerHTML = pagesHTML;
   overlay.appendChild(wrap);
   document.body.appendChild(overlay);
@@ -7096,7 +7349,7 @@ function printTriplicate() {
   document.getElementById(overlayId)?.remove();
   const overlay = document.createElement('div');
   overlay.id = overlayId;
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
 
   const toolbar = document.createElement('div');
   toolbar.className = 'no-print';
@@ -7114,7 +7367,7 @@ function printTriplicate() {
   overlay.appendChild(toolbar);
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'padding:20px;';
+  wrap.style.cssText = 'padding:10mm 0 0 0;background:#fff;';
   const frag = document.createDocumentFragment();
 
   const SVG_X = "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%25%27 height=%27100%25%27%3E%3Cline x1=%270%27 y1=%270%27 x2=%27100%25%27 y2=%27100%25%27 stroke=%27%23bbb%27 stroke-width=%271.2%27/%3E%3Cline x1=%27100%25%27 y1=%270%27 x2=%270%27 y2=%27100%25%27 stroke=%27%23bbb%27 stroke-width=%271.2%27/%3E%3C/svg%3E";
@@ -7138,7 +7391,7 @@ function printTriplicate() {
         return s.class === cls && cs && cs.code === sub.code;
       });
       const total      = comboSeated.length;
-      const classLabel = cls === 'XII' ? 'SENIOR SECONDARY-2026' : 'SECONDARY-2026';
+      const classLabel = getExamLabel(cls);
       const subLine    = `${sub.code}-${sub.name.toUpperCase()}`;
 
       let cg = '<colgroup>';
@@ -7575,6 +7828,7 @@ const PANEL_META = {
   schedule:   { title:'Centre Seating Plan Summary', sub:'Consolidated + subject-wise room summaries with roll ranges' },
   export:     { title:'Export Documents',    sub:'Download Excel and PDF reports' },
   datesheet:  { title:'Datesheet Reference', sub:'CBSE Official Revised Datesheet 2026' },
+  invigilator: { title:'Invigilator Demand', sub:'School-wise report, requirement input & letter generation' },
 };
 
 function switchPanel(id) {
@@ -7605,6 +7859,18 @@ document.getElementById('cfg-per-room').addEventListener('change', function() {
 });
 
 // Auto-sync rows×cols → per-room count, and re-generate if data loaded
+// Live-update sidebar badge when exam year changes
+document.getElementById('cfg-exam-year')?.addEventListener('input', function() {
+  const badge = document.getElementById('sb-logo-badge');
+  if (badge) badge.textContent = `CBSE ${this.value || new Date().getFullYear()}`;
+});
+
+// Live-update sidebar badge when exam year changes
+document.getElementById('cfg-exam-year')?.addEventListener('input', function() {
+  const badge = document.getElementById('sb-logo-badge');
+  if (badge) badge.textContent = 'CBSE ' + (this.value || new Date().getFullYear());
+});
+
 ['cfg-rows','cfg-cols','cfg-class-order','cfg-split','cfg-per-room'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
     // Sync rows*cols → perRoom display
@@ -7827,7 +8093,72 @@ function importDsPaste(cls) {
   saveDsData(cls, data);
   renderDsTable(cls);
   ta.value = '';
-  showModal('Imported', `✅ ${Object.keys(data).length} dates imported for Class ${cls.toUpperCase()}\n\nYou must re-upload and re-parse candidate files for new dates to take effect.`);
+
+  // Re-map existing candidates to new dates without requiring re-upload
+  const uCls = cls.toUpperCase(); // 'X' or 'XII'
+  const newCodeToDate = {};
+  Object.entries(data).forEach(([d, codes]) => codes.forEach(c => newCodeToDate[c] = d));
+  const subjectCodes = getActiveCodes(uCls);
+  let remapped = 0;
+
+  if (state.rawHTML && (state.rawHTML['10'] || state.rawHTML['12'])) {
+    // Best path: full re-parse from raw HTML so subject codes + dates are both fresh
+    const newCands = [];
+    if (state.rawHTML['12']) newCands.push(...parseHTML(state.rawHTML['12'], 'XII'));
+    if (state.rawHTML['10']) newCands.push(...parseHTML(state.rawHTML['10'], 'X'));
+    // Replace only the class we just updated; keep the other class as-is
+    const otherCands = state.candidates.filter(c => c.class !== uCls);
+    const thisCands  = newCands.filter(c => c.class === uCls);
+    state.candidates = [...otherCands, ...thisCands];
+    remapped = thisCands.length;
+  } else {
+    // Fallback: remap dateSubjects in-place using current subject codes extracted from existing dates
+    state.candidates.forEach(cand => {
+      if (cand.class !== uCls) return;
+      // Collect all subject codes this candidate had across any date
+      const allCodes = [];
+      Object.values(cand.dateSubjects).forEach(subs => subs.forEach(s => allCodes.push(s.code)));
+      // Rebuild dateSubjects using the new codeToDate map
+      const newDS = {};
+      allCodes.forEach(code => {
+        const d = newCodeToDate[code];
+        if (!d || newDS[d]) return;
+        newDS[d] = [{ code, name: subjectCodes[code] || code }];
+      });
+      cand.dateSubjects = newDS;
+      remapped++;
+    });
+  }
+
+  // Rebuild allDates from updated candidates
+  const datesSet = new Set();
+  state.candidates.forEach(c => Object.keys(c.dateSubjects).forEach(d => datesSet.add(d)));
+  state.allDates = sortDates([...datesSet]);
+
+  // Reset any previously generated seating so stale dates don't linger
+  state.generated  = false;
+  state.dateStates = {};
+  state.seating    = {};
+
+  saveToBrowser();
+
+  // Refresh the Datesheet reference panel so it shows new dates immediately
+  fillDatesheetPanel();
+
+  // Refresh UI counts + re-enable the Generate button
+  restoreUIAfterLoad();
+
+  // Auto-generate seating with new dates and switch to seating panel
+  if (state.allDates.length && state.candidates.length) {
+    resetCustomOrder();
+    generateSeating(null, false);
+  } else {
+    // Something went wrong with remapping — show generate button so user can try manually
+    const btnGen = document.getElementById('btn-generate');
+    if (btnGen) btnGen.disabled = false;
+  }
+
+  showModal('Imported', `✅ ${Object.keys(data).length} dates imported for Class ${uCls}\n${remapped} candidate(s) remapped to new dates.\n\nSeating regenerated automatically.`);
 }
 
 // ── Reset to hardcoded defaults ──
@@ -7837,6 +8168,7 @@ function resetDsToDefault(cls) {
   if (el) el.value = '';  // empty = use hardcoded constants
   saveToBrowser();
   renderDsTable(cls);
+  fillDatesheetPanel();
   showModal('Reset', `Class ${cls.toUpperCase()} datesheet reset to built-in 2026 values.`);
 }
 
@@ -8076,7 +8408,7 @@ function printQPStatement() {
   let pages = '';
   ['X','XII'].forEach(cls => {
     if (!byClass[cls]) return;
-    const examLabel = cls === 'X' ? 'SECONDARY-2026' : 'SENIOR SECONDARY-2026';
+    const examLabel = getExamLabel(cls);
     const classLabel = cls === 'X' ? 'CLASS-X' : 'CLASS-XII';
 
     byClass[cls].forEach(({ code, name }) => {
@@ -8153,7 +8485,7 @@ function printQPStatement() {
 
   const overlay = document.createElement('div');
   overlay.id = session.overlayId;
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
   overlay.innerHTML = `
     <div style="background:#0c1c35;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;">
       <span style="font-weight:700;">📄 QP Statement — ${ds}</span>
@@ -8162,7 +8494,7 @@ function printQPStatement() {
         <button onclick="closePrintSession('qpStatement','qp-stmt-overlay','qp-stmt-style')" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:6px 14px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:20px;">${pages}</div>`;
+    <div style="padding:10mm 0 0 0;background:#fff;">${pages}</div>`;
   document.body.appendChild(overlay);
 }
 
@@ -8238,7 +8570,7 @@ function printBankQPRegister() {
 
   const overlay = document.createElement('div');
   overlay.id = session.overlayId;
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#e5e7eb;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
   overlay.innerHTML = `
     <div style="background:#0c1c35;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;">
       <span style="font-weight:700;">📋 Bank QP Register</span>
@@ -8247,7 +8579,7 @@ function printBankQPRegister() {
         <button onclick="closePrintSession('qpRegister','qp-reg-overlay','qp-reg-style')" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:6px 14px;cursor:pointer;">✕ Close</button>
       </div>
     </div>
-    <div style="padding:16px;">
+    <div style="padding:10mm 0 0 0;background:#fff;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
           <tr><td colspan="10" style="text-align:center;padding:5px;font-weight:700;font-size:12pt;border:1px solid #000;">${centreName.toUpperCase()} (CENTER NO. ${centreCode})</td></tr>
@@ -9589,6 +9921,728 @@ document.addEventListener('visibilitychange', () => {
     try { saveToBrowser(); } catch (e) {}
   }
 });
+// ══════════════════════════════════════════════════════════════
+// INVIGILATOR DEMAND — Step 1: Report, Step 2: Requirements, Step 3: Letters
+// ══════════════════════════════════════════════════════════════
+
+const DEFAULT_INV_TEMPLATE = `To,
+THE PRINCIPAL
+{SCHOOL_CODE}  {SCHOOL_NAME}
+
+SUBJECT: DETAILMENT OF TEACHER AS ASSISTANT SUPERINTENDENT FOR {BOARD_EXAM_LABEL}
+
+Dear Sir/Madam,
+1. Please refer to CBSE letter regarding conduction of {BOARD_EXAM_LABEL}.
+2. As per the orders received from C.B.S.E. regional office Lucknow (UP) our school, {CENTRE_NAME} has been selected as centre to conduct {BOARD_EXAM_LABEL}. Your School is going to be appear in this examination at our centre.
+3. The examination is scheduled to be conducted with effect from {FIRST_DUTY_DATE}. Therefore, you are requested to detail teacher to perform the duties of as Assistant Superintendent in the {BOARD_EXAM_LABEL}. The teacher so detailed will report to this school at 09:00 AM on following dates for smooth conduction of the examination:-
+
+{DUTY_DATES_TABLE}
+
+4. Please note that teacher detailed should not be concerned of particular subject.
+5. Please mention Bank details of Invigilator (Name, A/C No, Bank IFSC, Bank Name, Mobile Number) and OASIS-ID in the letter.
+   Your co-operation in this regard will be highly appreciated.
+
+   Thanking you,
+
+   With Regards,
+
+
+   {CS_NAME}
+   (Principal)`;
+
+// ── Step tab switcher ──────────────────────────────────────────
+function showInvStep(n) {
+  [1,2,3].forEach(i => {
+    document.getElementById(`inv-step-${i}`).style.display = i === n ? '' : 'none';
+    const tab = document.getElementById(`inv-tab-${i}`);
+    tab.style.fontWeight = i === n ? '700' : '400';
+    tab.style.color = i === n ? '#0c1c35' : '#64748b';
+    tab.style.borderBottomColor = i === n ? '#0c1c35' : 'transparent';
+  });
+  if (n === 1) renderInvReport();
+  if (n === 2) renderInvReq();
+  if (n === 3) renderInvLetterStep();
+}
+
+// ── Build the core data structure ─────────────────────────────
+// Returns: { date → { class → { subjectCode → { schoolCode → { name, count } } } } }
+function buildInvData() {
+  const data = {};
+  state.candidates.forEach(cand => {
+    Object.entries(cand.dateSubjects).forEach(([ds, subjects]) => {
+      if (!data[ds]) data[ds] = {};
+      const cls = cand.class;
+      if (!data[ds][cls]) data[ds][cls] = {};
+      subjects.forEach(sub => {
+        const code = sub.code;
+        if (!data[ds][cls][code]) data[ds][cls][code] = {};
+        if (!data[ds][cls][code][cand.schoolCode])
+          data[ds][cls][code][cand.schoolCode] = { name: cand.schoolName, count: 0 };
+        data[ds][cls][code][cand.schoolCode].count++;
+      });
+    });
+  });
+  return data;
+}
+
+// Build school totals: { schoolCode → { name, totalCands, dates: Set } }
+function buildSchoolTotals() {
+  const totals = {};
+  state.candidates.forEach(cand => {
+    if (!totals[cand.schoolCode])
+      totals[cand.schoolCode] = { name: cand.schoolName, totalCands: 0, dates: new Set() };
+    totals[cand.schoolCode].totalCands++;
+    Object.keys(cand.dateSubjects).forEach(ds => totals[cand.schoolCode].dates.add(ds));
+  });
+  return totals;
+}
+
+// Build school-wise exam-date counts for invigilator demand.
+// A candidate is counted once for a date even if multiple subject codes exist on that date.
+function buildInvSchoolDateCounts() {
+  const totals = {};
+  state.candidates.forEach(cand => {
+    if (cand.schoolCode === '99999') return;
+    if (!totals[cand.schoolCode]) {
+      totals[cand.schoolCode] = { name: cand.schoolName, dates: {}, totalCands: 0 };
+    }
+    Object.keys(cand.dateSubjects || {}).forEach(ds => {
+      totals[cand.schoolCode].dates[ds] = (totals[cand.schoolCode].dates[ds] || 0) + 1;
+    });
+  });
+  Object.values(totals).forEach(sch => {
+    sch.totalCands = Object.values(sch.dates).reduce((sum, count) => sum + count, 0);
+  });
+  return totals;
+}
+
+// ── Step 1: Render Report ──────────────────────────────────────
+function renderInvReport() {
+  const out = document.getElementById('inv-report-output');
+  if (!state.candidates.length) {
+    out.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center;color:#64748b;">⚠️ No candidates loaded. Please upload files first.</div>';
+    return;
+  }
+
+  // Populate date filter
+  const dateFilter = document.getElementById('inv-filter-date');
+  const clsFilter  = document.getElementById('inv-filter-class');
+  const prevDate   = dateFilter.value;
+  dateFilter.innerHTML = '<option value="all">All Dates</option>';
+  state.allDates.forEach(ds => {
+    const opt = document.createElement('option');
+    opt.value = ds; opt.textContent = ds;
+    if (ds === prevDate) opt.selected = true;
+    dateFilter.appendChild(opt);
+  });
+
+  const filterDate = dateFilter.value;
+  const filterCls  = clsFilter.value;
+
+  const data = buildInvData();
+  const dates = filterDate === 'all' ? state.allDates : [filterDate];
+  const classes = filterCls === 'all' ? ['X','XII'] : [filterCls];
+
+  // Collect all school codes that appear in this filter
+  const schoolSet = new Set();
+  dates.forEach(ds => {
+    classes.forEach(cls => {
+      if (data[ds]?.[cls]) {
+        Object.values(data[ds][cls]).forEach(bySchool =>
+          Object.keys(bySchool).forEach(sc => schoolSet.add(sc))
+        );
+      }
+    });
+  });
+  const schools = [...schoolSet].sort();
+
+  if (!schools.length) {
+    out.innerHTML = '<div style="color:#64748b;padding:20px;">No data for selected filter.</div>';
+    return;
+  }
+
+  // Build HTML table
+  let html = `<div class="table-wrap" style="overflow-x:auto;">
+    <table style="font-size:11px;border-collapse:collapse;min-width:100%;">
+      <thead>
+        <tr style="background:#0c1c35;color:#fff;">
+          <th style="padding:6px 10px;text-align:left;white-space:nowrap;">School Code</th>
+          <th style="padding:6px 10px;text-align:left;min-width:200px;">School Name</th>`;
+
+  // One column per date+class+subject combination
+  const cols = []; // { ds, cls, code, name }
+  dates.forEach(ds => {
+    classes.forEach(cls => {
+      if (!data[ds]?.[cls]) return;
+      const codes = getActiveCodes(cls);
+      Object.keys(data[ds][cls]).sort().forEach(code => {
+        cols.push({ ds, cls, code, name: codes[code] || code });
+        html += `<th style="padding:6px 8px;text-align:center;white-space:nowrap;font-size:10px;">
+          ${ds}<br>${cls === 'XII' ? 'XII' : 'X'}<br>${code}
+        </th>`;
+      });
+    });
+  });
+
+  html += `<th style="padding:6px 10px;text-align:center;background:#1e3a5f;white-space:nowrap;">Total</th>
+        </tr>
+      </thead><tbody>`;
+
+  // One row per school
+  schools.forEach((sc, idx) => {
+    const schName = [...Object.values(data)].flatMap(byDate =>
+      Object.values(byDate).flatMap(byCls =>
+        Object.values(byCls).map(bySchool => bySchool[sc]?.name)
+      )
+    ).find(Boolean) || sc;
+
+    let rowTotal = 0;
+    let rowHtml = `<tr style="background:${idx%2===0?'#f8fafc':'#fff'};">
+      <td style="padding:5px 10px;font-family:monospace;font-size:11px;font-weight:600;">${sc}</td>
+      <td style="padding:5px 10px;">${schName}</td>`;
+
+    cols.forEach(({ ds, cls, code }) => {
+      const cnt = data[ds]?.[cls]?.[code]?.[sc]?.count || 0;
+      rowTotal += cnt;
+      rowHtml += `<td style="padding:5px 8px;text-align:center;${cnt>0?'font-weight:600;color:#0c1c35;':'color:#cbd5e1;'}">${cnt > 0 ? cnt : '—'}</td>`;
+    });
+
+    rowHtml += `<td style="padding:5px 10px;text-align:center;font-weight:700;background:#e0e7ff;">${rowTotal}</td></tr>`;
+    html += rowHtml;
+  });
+
+  // Totals row
+  html += `<tr style="background:#0c1c35;color:#fff;font-weight:700;">
+    <td colspan="2" style="padding:6px 10px;">TOTAL</td>`;
+  cols.forEach(({ ds, cls, code }) => {
+    const total = schools.reduce((s, sc) => s + (data[ds]?.[cls]?.[code]?.[sc]?.count || 0), 0);
+    html += `<td style="padding:6px 8px;text-align:center;">${total}</td>`;
+  });
+  const grandTotal = schools.reduce((s, sc) => {
+    return s + cols.reduce((ss, { ds, cls, code }) => ss + (data[ds]?.[cls]?.[code]?.[sc]?.count || 0), 0);
+  }, 0);
+  html += `<td style="padding:6px 10px;text-align:center;">${grandTotal}</td></tr>`;
+
+  html += '</tbody></table></div>';
+  html += `<div style="font-size:11px;color:#64748b;margin-top:8px;">Showing ${schools.length} school(s) · ${cols.length} exam slot(s) · ${grandTotal} total appearances (private candidates excluded)</div>`;
+  out.innerHTML = html;
+}
+
+// ── Step 2: Render Requirements Input (per-date per-school) ──
+function renderInvReq() {
+  const out = document.getElementById('inv-req-output');
+
+  const totals = buildInvSchoolDateCounts();
+
+  if (!Object.keys(totals).length) {
+    out.innerHTML = '<div style="color:#64748b;padding:20px;">No candidates loaded.</div>';
+    return;
+  }
+
+  // Only dates where this school has at least one candidate (built per school below)
+  // Header: School | Name | TotalCands | [date1 inv] [date2 inv] ... | Notes
+
+  let html = `<div style="font-size:11px;color:#64748b;margin-bottom:8px;">
+    Enter the number of invigilators required from each school <strong>for each exam date</strong>.
+    Leave blank or 0 if not required on that date.
+  </div>
+  <div class="table-wrap" style="overflow-x:auto;"><table style="font-size:11px;border-collapse:collapse;min-width:100%;">
+    <thead>
+      <tr style="background:#0c1c35;color:#fff;">
+        <th style="padding:8px 10px;text-align:left;white-space:nowrap;">School Code</th>
+        <th style="padding:8px 10px;text-align:left;min-width:180px;">School Name</th>
+        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">Total Cands</th>`;
+
+  state.allDates.forEach(ds => {
+    html += `<th style="padding:8px 8px;text-align:center;white-space:nowrap;font-size:10px;min-width:80px;">
+      ${ds}<br><span style="font-weight:400;">(Inv. Req.)</span>
+    </th>`;
+  });
+
+  html += `<th style="padding:8px 10px;text-align:left;min-width:150px;">Notes</th>
+      </tr>
+    </thead><tbody>`;
+
+  Object.entries(totals).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([code, sch], idx) => {
+    const saved = state.invReq[code] || {};
+    const savedDates = saved.dates || {};
+
+    html += `<tr style="background:${idx%2===0?'#f8fafc':'#fff'};">
+      <td style="padding:5px 10px;font-family:monospace;font-weight:600;font-size:11px;">${code}</td>
+      <td style="padding:5px 10px;">${sch.name}</td>
+      <td style="padding:5px 10px;text-align:center;font-weight:700;">${sch.totalCands}</td>`;
+
+    state.allDates.forEach(ds => {
+      const cands = sch.dates[ds] || 0;
+      const savedVal = savedDates[ds] ?? '';
+
+      html += `<td style="padding:5px 8px;text-align:center;${cands === 0?'background:#f8fafc;':''}" title="${cands} candidate(s) from this school on this date">
+        <input type="number" min="0" max="99" value="${savedVal}"
+          data-school="${code}" data-date="${ds}" class="inv-req-date-input"
+          style="width:56px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;text-align:center;font-size:12px;font-weight:600;"
+          placeholder="0">
+        <div style="font-size:9px;color:${cands > 0 ? '#64748b' : '#94a3b8'};margin-top:1px;">${cands} cands</div>
+      </td>`;
+    });
+
+    html += `<td style="padding:5px 10px;">
+        <input type="text" value="${saved.notes || ''}"
+          data-school="${code}" class="inv-notes-input"
+          placeholder="e.g. Morning shift only"
+          style="width:100%;padding:3px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;">
+      </td>
+    </tr>`;
+  });
+
+  // Totals row
+  html += `<tr style="background:#0c1c35;color:#fff;font-weight:700;">
+    <td colspan="3" style="padding:6px 10px;">TOTAL Invigilators per Date</td>`;
+  state.allDates.forEach(ds => {
+    // sum of all inv inputs for this date (from DOM — can't sum yet so put placeholder)
+    html += `<td id="inv-total-${ds.replace(/[^a-z0-9]/gi,'_')}" style="padding:6px 8px;text-align:center;">—</td>`;
+  });
+  html += `<td></td></tr>`;
+
+  html += '</tbody></table></div>';
+  out.innerHTML = html;
+
+  // Live-update totals row as user types
+  out.querySelectorAll('.inv-req-date-input').forEach(inp => {
+    inp.addEventListener('input', updateInvDateTotals);
+  });
+  updateInvDateTotals();
+}
+
+function updateInvDateTotals() {
+  state.allDates.forEach(ds => {
+    const id = 'inv-total-' + ds.replace(/[^a-z0-9]/gi,'_');
+    const el = document.getElementById(id);
+    if (!el) return;
+    let total = 0;
+    document.querySelectorAll(`.inv-req-date-input[data-date="${ds}"]`).forEach(inp => {
+      total += parseInt(inp.value) || 0;
+    });
+    el.textContent = total > 0 ? total : '—';
+  });
+}
+
+function syncInvReqFromForm() {
+  const reqInputs = document.querySelectorAll('.inv-req-date-input');
+  const noteInputs = document.querySelectorAll('.inv-notes-input');
+  if (!reqInputs.length && !noteInputs.length) return false;
+
+  const nextReq = {};
+  // Per-date inputs
+  reqInputs.forEach(inp => {
+    const code = inp.dataset.school;
+    const ds   = inp.dataset.date;
+    const val  = parseInt(inp.value) || 0;
+    if (!nextReq[code]) nextReq[code] = { dates: {}, notes: '' };
+    if (val > 0) nextReq[code].dates[ds] = val;
+  });
+  // Notes
+  noteInputs.forEach(inp => {
+    const code = inp.dataset.school;
+    if (!nextReq[code]) nextReq[code] = { dates: {}, notes: '' };
+    nextReq[code].notes = inp.value.trim();
+  });
+  // Remove schools with no requirements
+  Object.keys(nextReq).forEach(code => {
+    const r = nextReq[code];
+    if (!Object.values(r.dates || {}).some(v => v > 0) && !r.notes)
+      delete nextReq[code];
+  });
+  state.invReq = nextReq;
+  return true;
+}
+
+function saveInvReq() {
+  syncInvReqFromForm();
+  saveToBrowser();
+  const count = Object.keys(state.invReq).length;
+  showModal('Saved', `✅ Requirements saved for ${count} school(s).\n\nProceed to Step 3 to generate letters.`);
+}
+
+// ── Step 3: Letter template render ────────────────────────────
+function renderInvLetterStep() {
+  const ta = document.getElementById('inv-letter-template');
+  if (!ta.value.trim() || isLegacyInvTemplate(ta.value)) ta.value = DEFAULT_INV_TEMPLATE;
+}
+
+function resetInvTemplate() {
+  document.getElementById('inv-letter-template').value = DEFAULT_INV_TEMPLATE;
+}
+
+function isLegacyInvTemplate(text) {
+  return text.includes('निरीक्षक') || text.includes('CBSE {EXAM_NAME} परीक्षा') || text.includes('Centre Superintendent');
+}
+
+function getExamSessionLabel() {
+  const year = getExamYear();
+  return `${year - 1}-${String(year).slice(-2)}`;
+}
+
+function formatInvStartDate(ds) {
+  const dt = parseDate(ds);
+  return dt.toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' }).replace(' ', ', ');
+}
+
+function formatInvLetterDate(ds) {
+  const dt = parseDate(ds);
+  const date = dt.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }).replace(/ /g, '-');
+  return `${date} ${dayName(ds)}`;
+}
+
+function getBoardExamCodeForSchool(schoolCode, invData) {
+  const classes = new Set();
+  state.allDates.forEach(ds => {
+    ['X','XII'].forEach(cls => {
+      if (!invData[ds]?.[cls]) return;
+      Object.values(invData[ds][cls]).forEach(bySchool => {
+        if (bySchool[schoolCode]) classes.add(cls);
+      });
+    });
+  });
+  if (classes.has('X') && classes.has('XII')) return 'SSE/SSCE';
+  if (classes.has('XII')) return 'SSCE';
+  return 'SSE';
+}
+
+function getBoardExamLabelForSchool(schoolCode, invData) {
+  return `${getBoardExamCodeForSchool(schoolCode, invData)}-${getExamSessionLabel()} (2nd Board)`;
+}
+
+function formatInvDutySubjects(items) {
+  if (!items.length) return 'As per centre requirement';
+  const grouped = {};
+  items.forEach(item => {
+    const key = `${item.cls}|${item.name}`;
+    if (!grouped[key]) grouped[key] = { cls: item.cls, name: item.name, codes: [] };
+    grouped[key].codes.push(item.code);
+  });
+  return Object.values(grouped).map(item => {
+    const clsLabel = item.cls === 'XII' ? 'Class XII' : 'Class X';
+    return `${clsLabel} - ${item.codes.join('/')} ${item.name}`;
+  }).join(', ');
+}
+
+function printInvLetters() {
+  const overlay = document.getElementById('inv-letters-overlay');
+  if (!overlay) {
+    showModal('No Letters', 'Please generate the letters first.');
+    return;
+  }
+  setTimeout(() => window.print(), 50);
+}
+
+// ── Step 3: Generate Letters ───────────────────────────────────
+function generateInvLetters() {
+  if (syncInvReqFromForm()) saveToBrowser();
+  showInvStep(3);
+
+  const schools = Object.entries(state.invReq).filter(([,v]) => Object.values(v.dates || {}).some(n => n > 0));
+  if (!schools.length) {
+    showModal('No Requirements Set', 'Please go to Step 2 and enter the number of invigilators required for at least one school.');
+    return;
+  }
+
+  const template    = document.getElementById('inv-letter-template').value || DEFAULT_INV_TEMPLATE;
+  const centreName  = document.getElementById('cfg-centre-name')?.value?.trim() || '—';
+  const centreCode  = document.getElementById('cfg-centre-code')?.value?.trim() || '—';
+  const csName      = document.getElementById('cfg-centre-head')?.value?.trim() || 'Centre Superintendent';
+  const city        = document.getElementById('cfg-centre-city')?.value?.trim() || '—';
+  const examYear    = getExamYear();
+  const examSession = getExamSessionLabel();
+  const today       = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'long', year:'numeric' });
+
+  const totals  = buildSchoolTotals();
+  const invData = buildInvData();
+
+  // Build duty dates table per school — includes per-date invigilator demand
+  function getDutyDateRows(schoolCode) {
+    const codes = { X: getActiveCodes('X'), XII: getActiveCodes('XII') };
+    const savedDates = (state.invReq[schoolCode] || {}).dates || {};
+    const rows = [];
+
+    state.allDates.forEach(ds => {
+      const daySubjects = [];
+      ['X','XII'].forEach(c => {
+        if (!invData[ds]?.[c]) return;
+        Object.entries(invData[ds][c]).forEach(([code, bySchool]) => {
+          if (bySchool[schoolCode]) {
+            daySubjects.push({ cls: c, code, name: codes[c][code] || code });
+          }
+        });
+      });
+      const inv = savedDates[ds] || 0;
+      if (inv <= 0) return;
+      rows.push({
+        sno: rows.length + 1,
+        ds,
+        day: dayName(ds),
+        subjects: formatInvDutySubjects(daySubjects),
+        inv,
+      });
+    });
+
+    return rows;
+  }
+
+  function renderInvDutyTable(rows) {
+    if (!rows.length) {
+      return '<div class="inv-empty-duty">No duty dates found for this school.</div>';
+    }
+    const body = rows.map(r => `
+      <tr>
+        <td class="inv-date-cell">${escapeHtmlLetterContent(formatInvLetterDate(r.ds))}</td>
+        <td>${escapeHtmlLetterContent(r.subjects)}</td>
+        <td class="inv-count-cell">${r.inv}</td>
+      </tr>
+    `).join('');
+    return `<table class="inv-duty-table">
+      <thead>
+        <tr>
+          <th>DATE</th>
+          <th>CLASS / SUBJECT NAME</th>
+          <th>No. of Teachers<br>Required</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>`;
+  }
+
+  function renderInvLetterBody(text, dutyTableHtml) {
+    const parts = String(text).split('{DUTY_DATES_TABLE}');
+    const renderText = part => escapeHtmlLetterContent(part.trim()).replace(/\n/g, '<br>');
+    if (parts.length === 1) {
+      return `<div class="inv-letter-body">${renderText(text)}</div>`;
+    }
+    return `<div class="inv-letter-body">
+      ${renderText(parts[0])}
+      ${dutyTableHtml}
+      ${renderText(parts.slice(1).join('{DUTY_DATES_TABLE}'))}
+    </div>`;
+  }
+
+  function getTotalInvigilators(schoolCode) {
+    const savedDates = (state.invReq[schoolCode] || {}).dates || {};
+    return Object.values(savedDates).reduce((s, v) => s + (v || 0), 0);
+  }
+
+  // Build per-school letter
+  const session = beginPrintSession({ reportKey: 'invLetters' });
+  const overlayId = session?.overlayId || 'inv-letters-overlay';
+  const styleId   = session?.styleId   || 'inv-letters-style';
+
+  // Create overlay
+  let overlay = document.getElementById('inv-letters-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'inv-letters-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:1000;overflow-y:auto;padding:10mm 0 0 0;';
+    document.body.appendChild(overlay);
+  }
+
+  let style = document.getElementById('inv-letters-style');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'inv-letters-style';
+    document.head.appendChild(style);
+  }
+  style.textContent = buildPrintShellCSS(session) + `
+    @media print {
+      #inv-letters-overlay .no-print { display:none!important; }
+      .inv-letter-page {
+        page-break-after: always;
+        box-shadow:none!important;
+        margin:0!important;
+        width:auto!important;
+        min-height:auto!important;
+        padding:0!important;
+      }
+      .inv-letter-page:last-child { page-break-after: avoid; }
+      .inv-duty-table thead { display:table-header-group!important; }
+      .inv-duty-table th {
+        color:#111!important;
+        background:#fff!important;
+        border:1px solid #111!important;
+        -webkit-print-color-adjust:exact;
+        print-color-adjust:exact;
+      }
+      .inv-duty-table tr,
+      .inv-duty-table td,
+      .inv-duty-table th { break-inside:avoid; page-break-inside:avoid; }
+    }
+    .inv-letter-page {
+      background:#fff;
+      width:190mm;
+      min-height:270mm;
+      margin:0 auto 20px;
+      padding:20mm 18mm 20mm 25mm;
+      box-shadow:0 2px 16px rgba(0,0,0,0.12);
+      font-family:'Times New Roman',Times,serif;
+      font-size:13pt;
+      line-height:1.55;
+      color:#111;
+      box-sizing:border-box;
+      word-wrap:break-word;
+    }
+    .inv-letter-body {
+      white-space:normal;
+    }
+    .inv-duty-table {
+      width:100%;
+      border-collapse:collapse;
+      margin:12pt 0 14pt;
+      table-layout:fixed;
+      font-size:11.5pt;
+      line-height:1.25;
+    }
+    .inv-duty-table th,
+    .inv-duty-table td {
+      border:1px solid #111;
+      padding:5pt 6pt;
+      vertical-align:top;
+    }
+    .inv-duty-table th {
+      text-align:center;
+      font-weight:bold;
+      color:#111;
+      background:#fff;
+    }
+    .inv-duty-table th:nth-child(1),
+    .inv-duty-table td:nth-child(1) {
+      width:32%;
+    }
+    .inv-duty-table th:nth-child(2),
+    .inv-duty-table td:nth-child(2) {
+      width:44%;
+    }
+    .inv-duty-table th:nth-child(3),
+    .inv-duty-table td:nth-child(3) {
+      width:24%;
+      text-align:center;
+    }
+    .inv-duty-table th span {
+      font-weight:bold;
+    }
+    .inv-date-cell {
+      white-space:nowrap;
+    }
+    .inv-count-cell {
+      font-weight:bold;
+      font-size:13pt;
+    }
+    .inv-empty-duty {
+      border:1px solid #111;
+      padding:8pt;
+      margin:12pt 0;
+      text-align:center;
+      font-style:italic;
+    }
+    .inv-letter-header {
+      text-align:center;
+      border-bottom:2px solid #0c1c35;
+      padding-bottom:10px;
+      margin-bottom:16px;
+    }
+  `;
+
+  let lettersHtml = `<div class="no-print" style="background:#0c1c35;color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;">
+    <div style="font-weight:700;">Invigilator Demand Letters - ${schools.length} school(s)</div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="printInvLetters()" style="background:#f59e0b;color:#000;border:none;border-radius:5px;padding:7px 16px;font-size:13px;cursor:pointer;font-weight:700;">Print All</button>
+      <button onclick="closePrintSession('${session.reportKey}','${overlayId}','${styleId}')"
+        style="background:#6b7280;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:13px;cursor:pointer;">Close</button>
+    </div>
+  </div>`;
+
+  schools.forEach(([schoolCode, req]) => {
+    const schInfo   = totals[schoolCode] || { name: schoolCode, totalCands: 0, dates: new Set() };
+    const boardExamLabel = getBoardExamLabelForSchool(schoolCode, invData);
+    const dutyRows = getDutyDateRows(schoolCode);
+    const dutyTableHtml = renderInvDutyTable(dutyRows);
+    const totalInv   = getTotalInvigilators(schoolCode);
+    const savedDates = (state.invReq[schoolCode] || {}).dates || {};
+    const firstDs = sortDates(Object.keys(savedDates).filter(ds => (savedDates[ds] || 0) > 0))[0] || state.allDates[0] || '';
+    const firstDutyDate = firstDs ? formatInvStartDate(firstDs) : 'the scheduled date';
+    const letter = template
+      .replace(/{SCHOOL_NAME}/g,              schInfo.name)
+      .replace(/{SCHOOL_CODE}/g,              schoolCode)
+      .replace(/{CENTRE_NAME}/g,              centreName)
+      .replace(/{CENTRE_CODE}/g,              centreCode)
+      .replace(/{EXAM_NAME}/g,               boardExamLabel)
+      .replace(/{EXAM_YEAR}/g,               examYear)
+      .replace(/{EXAM_SESSION}/g,            examSession)
+      .replace(/{BOARD_EXAM_LABEL}/g,        boardExamLabel)
+      .replace(/{FIRST_DUTY_DATE}/g,         firstDutyDate)
+      .replace(/{TOTAL_INVIGILATORS_SUM}/g,  totalInv)
+      .replace(/{INVIGILATORS_REQUIRED}/g,   totalInv)
+      .replace(/{CS_NAME}/g,                 csName)
+      .replace(/{CITY}/g,                    city)
+      .replace(/{DATE_TODAY}/g,              today);
+
+    lettersHtml += `<div class="inv-letter-page">
+      <div class="inv-letter-header no-print" style="font-family:sans-serif;font-size:11px;color:#64748b;">
+        School: ${schInfo.name} (${schoolCode}) · Invigilators required: ${totalInv}
+      </div>
+      ${renderInvLetterBody(letter, dutyTableHtml)}
+    </div>`;
+  });
+
+  overlay.innerHTML = lettersHtml;
+  overlay.style.display = 'block';
+}
+
+function escapeHtmlLetterContent(text) {
+  return text
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+
+// ── Print just the report ──────────────────────────────────────
+function printInvReport() {
+  showInvStep(1);
+  const content = document.getElementById('inv-report-output')?.innerHTML;
+  if (!content) { showModal('No Data','Generate the report first.'); return; }
+  const centreName = document.getElementById('cfg-centre-name')?.value || '';
+  const w = window.open('','_blank','width=1100,height=750');
+  w.document.write(`<!DOCTYPE html><html><head><title>Invigilator Demand Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; font-size: 11px; }
+      h2 { color: #0c1c35; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ccc; padding: 4px 8px; }
+      th { background: #0c1c35; color: #fff; }
+      tr:nth-child(even) { background: #f8fafc; }
+      @media print { button { display:none; } }
+    </style></head><body>
+    <h2>Invigilator Demand — School-wise Report</h2>
+    <div style="margin-bottom:12px;color:#374151;">
+      Centre: <strong>${centreName}</strong> · Exam: <strong>${getExamShort('X')} & ${getExamShort('XII')} ${getExamYear()}</strong>
+    </div>
+    ${content}
+    <div style="margin-top:20px;text-align:right;color:#64748b;font-size:10px;">Generated: ${new Date().toLocaleString('en-IN')}</div>
+    <br><button onclick="window.print()">🖨️ Print</button>
+    </body></html>`);
+  w.document.close();
+}
+
+// ── Wire up panel activation to render report ─────────────────
+const _origSwitchPanel = switchPanel;
+// Override already defined — hook into showInvStep via panel switch
+// We patch the existing switchPanel to trigger report render on invigilator panel
+(function() {
+  const orig = window.switchPanel;
+  window.switchPanel = function(id) {
+    orig(id);
+    if (id === 'invigilator') {
+      showInvStep(1);
+    }
+  };
+})();
+
 </script>
 
 <!-- ══ SUBJECT ORDER MODAL ══════════════════════════════════════ -->
