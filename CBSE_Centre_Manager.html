@@ -1022,6 +1022,7 @@ tbody tr:last-child td { border-bottom: none; }
           <button class="btn btn-outline btn-sm" onclick="printAttendanceSheet('XII')">📋 Att. Sheet (XII)</button>
           <button class="btn btn-outline btn-sm" onclick="printAppendixE('X')">📋 Appendix-E (X)</button>
           <button class="btn btn-outline btn-sm" onclick="printAppendixE('XII')">📋 Appendix-E (XII)</button>
+          <button class="btn btn-outline btn-sm" onclick="printAbsenteeDetail()">📋 Absentee Detail</button>
           <button class="btn btn-outline btn-sm" onclick="printQPStatement()">📄 QP Statement</button>
           <button class="btn btn-outline btn-sm" onclick="printBankQPRegister()">📋 Bank QP Register</button>
           <button class="btn btn-primary btn-sm" onclick="printSeating()">🖨️ Print / PDF</button>
@@ -1286,6 +1287,14 @@ tbody tr:last-child td { border-bottom: none; }
             <button class="btn btn-outline btn-sm" onclick="exportAnswerBookReceiptExcel()">📥 Receipt</button>
             <button class="btn btn-outline btn-sm" onclick="exportAnswerBookDaywiseExcel()">📅 Day-wise</button>
             <button class="btn btn-outline btn-sm" onclick="exportAnswerBookFinalExcel()">🏁 Final</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📋</div>
+          <div class="export-title">Absentee Detail</div>
+          <div class="export-desc">Subject-wise present/absent roll number report for a specific date.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-primary btn-sm" onclick="printAbsenteeDetail()">🖨️ Print/PDF</button>
           </div>
         </div>
         <div class="export-card">
@@ -4787,6 +4796,15 @@ function requireCurrentDateSeatingForPrint() {
   return { ds, seated };
 }
 
+// ── Helper: get subjects string for a seated record on a given date ──
+// Falls back to dateSubjects map when subjectsToday is not populated
+// (e.g. after session restore, slim dateState doesn't carry subjectsToday)
+function getSubjectsLabel(s, ds) {
+  const today = s.subjectsToday && String(s.subjectsToday).trim();
+  if (today && today !== '—') return today;
+  return formatSubjectsForDate(s, ds) || '—';
+}
+
 function exportSeatingExcel() {
   if (!requireGeneratedForReports()) return;
   const cfg = getConfig();
@@ -4796,7 +4814,7 @@ function exportSeatingExcel() {
     (state.seating[ds]||[]).forEach(s => {
       rows.push([ds, dayName(ds), `Room ${s.roomNo}`, s.seatInRoom, s.seatLabel,
         s.class, s.roll, s.name, s.sex, s.cat,
-        s.schoolCode === '99999' ? 'Private' : s.schoolCode, s.subjectsToday]);
+        s.schoolCode === '99999' ? 'Private' : s.schoolCode, getSubjectsLabel(s, ds)]);
     });
   });
   const wb = makeWB('Seating Plan', headers, rows);
@@ -4810,7 +4828,7 @@ function exportCandidatesExcel() {
   state.allDates.forEach(ds => {
     (state.seating[ds]||[]).forEach(s => {
       rows.push([s.class, s.roll, s.name, s.mother, s.father, s.sex, s.cat,
-        s.schoolCode, s.schoolName, ds, `Room ${s.roomNo}`, s.seatLabel, s.subjectsToday]);
+        s.schoolCode, s.schoolName, ds, `Room ${s.roomNo}`, s.seatLabel, getSubjectsLabel(s, ds)]);
     });
   });
   const wb = makeWB('Candidates', headers, rows);
@@ -4920,7 +4938,7 @@ function exportSchoolWiseExcel() {
     state.allDates.forEach(ds => {
       (state.seating[ds]||[]).filter(s => s.schoolCode === sc).forEach(s => {
         rows.push([s.schoolCode, s.schoolName, s.class, s.roll, s.name, s.mother, s.father,
-          s.sex, s.cat, ds, `Room ${s.roomNo}`, s.seatLabel, s.subjectsToday]);
+          s.sex, s.cat, ds, `Room ${s.roomNo}`, s.seatLabel, getSubjectsLabel(s, ds)]);
       });
     });
   });
@@ -4944,7 +4962,7 @@ function exportScheduleExcel() {
     candMap[roll].sort((a,b) => parseDate(a.ds) - parseDate(b.ds)).forEach(s => {
       rows.push([s.class, s.roll, s.name, s.mother, s.father, s.sex, s.cat,
         s.schoolCode === '99999' ? 'Private' : s.schoolCode,
-        s.ds, dayName(s.ds), `Room ${s.roomNo}`, s.seatLabel, s.subjectsToday]);
+        s.ds, dayName(s.ds), `Room ${s.roomNo}`, s.seatLabel, getSubjectsLabel(s, s.ds)]);
     });
   });
   const wb = makeWB('Candidate Schedule', headers, rows);
@@ -4967,6 +4985,7 @@ const PRINT_REPORT_REGISTRY = {
   triplicate:     { overlayId: 'triplicate-overlay',    styleId: 'triplicate-print-style', pageSize: 'A4', orientation: 'portrait', margins: '8mm 12mm 8mm 12mm' },
   qpStatement:    { overlayId: 'qp-stmt-overlay',       styleId: 'qp-stmt-style',       pageSize: 'A4', orientation: 'portrait',  margins: '20mm' },
   qpRegister:     { overlayId: 'qp-reg-overlay',        styleId: 'qp-reg-style',        pageSize: 'A4', orientation: 'portrait', margins: '10mm 12mm' },
+  absenteeDetail: { overlayId: 'absentee-detail-overlay', styleId: 'absentee-detail-style', pageSize: 'A4', orientation: 'portrait', margins: '10mm' },
 };
 
 const PRINT_RUNTIME = {
@@ -8603,6 +8622,160 @@ function printBankQPRegister() {
     </div>`;
   document.body.appendChild(overlay);
 }
+
+function printAbsenteeDetail(targetDate) {
+  const ds = targetDate || currentDate;
+  if (!ds) {
+    showModal('Select Date', 'Please select an exam date first.');
+    return;
+  }
+  if (!state.generated) {
+    showModal('Not Generated', 'Please generate seating plan first.');
+    return;
+  }
+
+  const session = beginPrintSession({ reportKey: 'absenteeDetail' });
+  const { overlayId, styleId } = session;
+
+  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
+  const centreCode = document.getElementById('cfg-centre-code').value || '';
+
+  // Get all candidates for this date
+  const dateCands = (state.seating[ds] || []).filter(c => c.roll);
+  if (!dateCands.length) {
+    showModal('No Data', 'No candidates found for ' + ds);
+    return;
+  }
+
+  // Group by subject (Class-Code)
+  const groups = {};
+  dateCands.forEach(c => {
+    const subjects = c.dateSubjects[ds] || [];
+    subjects.forEach(sub => {
+      const key = `${c.class}-${sub.code}`;
+      if (!groups[key]) {
+        groups[key] = {
+          cls: c.class,
+          code: sub.code,
+          name: sub.name,
+          cands: []
+        };
+      }
+      groups[key].cands.push(c);
+    });
+  });
+
+  const sortedKeys = Object.keys(groups).sort();
+  let pages = '';
+
+  sortedKeys.forEach(key => {
+    const group = groups[key];
+    const cands = group.cands.sort((a,b) => a.roll.localeCompare(b.roll));
+    
+    const att = (state.dateStates[ds] && state.dateStates[ds].attendance) || {};
+    const absents = cands.filter(c => att[c.roll] === 'A');
+    const presents = cands.filter(c => att[c.roll] !== 'A');
+
+    const totalReg = cands.length;
+    const totalAbsent = absents.length;
+    const totalPresent = presents.length;
+    const totalABSent = totalPresent; // Per user request: present candidate = answer book sent
+
+    const absentRolls = absents.map(c => c.roll).join(', ');
+    const presentRolls = presents.map(c => c.roll).join(', ');
+
+    pages += `
+    <div class="absentee-page" style="width:190mm; margin:0 auto; font-family:Arial, sans-serif; padding:10mm 5mm; page-break-after:always;">
+      <div style="text-align:center; text-decoration:underline; font-weight:bold; font-size:14pt; margin-bottom:20px;">ABSENTEE DETAIL</div>
+      
+      <table style="width:100%; border-collapse:collapse; font-size:11pt; margin-bottom:10px;">
+        <tr>
+          <td style="width:150px; font-weight:bold; padding:4px 0;">Center No.:</td>
+          <td style="font-weight:bold; padding:4px 0;">${centreCode}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold; padding:4px 0;">Name of Centre:</td>
+          <td style="padding:4px 0;">${centreName.toUpperCase()}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold; padding:4px 0;">Name of Examination:</td>
+          <td style="padding:4px 0;">${getExamFullUpper(group.cls)} ${getExamYear()}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold; padding:4px 0;">Subject:</td>
+          <td style="padding:4px 0;">${group.cls}-${group.code}-${group.name.toUpperCase()}</td>
+          <td style="width:100px; font-weight:bold; padding:4px 0;">TOTAL REG.</td>
+          <td style="width:50px; font-weight:bold; padding:4px 0; text-align:right;">${totalReg}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold; padding:4px 0;">Day & Date:</td>
+          <td style="padding:4px 0;">${dayName(ds)}, ${ds}</td>
+        </tr>
+      </table>
+
+      <div style="text-align:center; font-weight:bold; font-size:12pt; margin:15px 0 5px 0;">ABSENT ROLL NO(s).</div>
+      <div style="border:1.5px solid #000; min-height:80px; padding:10px; font-family:'Courier New', monospace; font-size:11pt; line-height:1.6; margin-bottom:20px;">
+        ${absentRolls || '&nbsp;'}
+      </div>
+
+      <div style="text-align:center; font-weight:bold; font-size:12pt; border-bottom:1.5px solid #000; margin:15px 0 10px 0; padding-bottom:5px;">PRESENT ROLL NO(s).</div>
+      <div style="font-family:'Courier New', monospace; font-size:10pt; line-height:1.5; margin-bottom:40px; text-align:justify;">
+        ${presentRolls || '&nbsp;'}
+      </div>
+
+      <table style="width:100%; border-collapse:collapse; font-size:11pt; margin-top:auto;">
+        <tr>
+          <td style="width:33%; font-weight:bold; padding:5px 0;">TOTAL ABSENTEE</td>
+          <td style="width:10%; font-weight:bold; padding:5px 0;">${totalAbsent}</td>
+          <td style="width:33%; font-weight:bold; padding:5px 0;">TOTAL PRESENT</td>
+          <td style="width:10%; font-weight:bold; padding:5px 0; text-align:right;">${totalPresent}</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td></td>
+          <td style="font-weight:bold; padding:5px 0;">TOTAL ANSWER BOOK SENT</td>
+          <td style="font-weight:bold; padding:5px 0; text-align:right;">${totalABSent}</td>
+        </tr>
+      </table>
+
+      <div style="font-weight:bold; font-size:10pt; margin-top:20px;">* NO UNFAIR MEANS CASES</div>
+
+      <div style="display:flex; justify-content:space-between; margin-top:40px; font-weight:bold; font-size:11pt;">
+        <div>DATE:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${ds}</div>
+        <div style="text-align:right;">Signature of Centre Superintendent</div>
+      </div>
+    </div>
+    `;
+  });
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `${buildPrintShellCSS(session)}
+  .absentee-page { page-break-after:always; }
+  .absentee-page:last-child { page-break-after:avoid; }
+  `;
+  document.head.appendChild(style);
+
+  const overlay = document.createElement('div');
+  overlay.id = overlayId;
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
+  overlay.innerHTML = `
+    <div class="no-print" style="position:sticky;top:0;background:#0c1c35;color:#fff;
+      z-index:10001;padding:10px 20px;display:flex;align-items:center;
+      justify-content:space-between;font-family:Arial,sans-serif;font-size:13px;">
+      <span>📋 Absentee Detail Report — ${ds}</span>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary btn-sm" onclick="window.print()">🖨️ Print</button>
+        <button class="btn btn-outline btn-sm" style="color:#fff;border-color:rgba(255,255,255,0.3)" 
+          onclick="closePrintSession('${session.reportKey}','${overlayId}','${styleId}')">✕ Close</button>
+      </div>
+    </div>
+    <div class="print-content" style="background:#fff;">${pages}</div>
+  `;
+  document.body.appendChild(overlay);
+  registerPrintHooks(session.reportKey, session.beforePrint, session.afterPrint);
+}
+
 
 // ════════════════════════════════════════════════════════════════
 // ANSWER BOOK INVENTORY + SERIAL TRACKING
