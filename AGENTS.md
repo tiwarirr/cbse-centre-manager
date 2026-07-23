@@ -4,20 +4,29 @@ This document is a working handover for future coding sessions on this project.
 
 ## 1) Project Snapshot
 - Project: **CBSE Centre Management System**
-- Main file: `/Users/aparnatiwari/Downloads/cbse/CBSE_Centre_Manager.html`
-- Architecture: **single HTML file** containing:
-  - UI markup
-  - CSS styles
-  - all JavaScript logic (parser, seating engine, attendance, reports, exports, persistence)
-- Runtime: browser-only (no backend).
+- Legacy main file (kept for reference, no longer the active app): `CBSE_Centre_Manager.html`
+- **Active frontend as of the Phase A modular refactor: `frontend/`** — see §1a.
+- Runtime: browser-only (no backend yet — a SQLite/Flask backend on PythonAnywhere is planned; see the multi-phase plan below).
 - External dependency: XLSX via CDN (`xlsx.full.min.js`) for Excel exports.
 
+## 1a) Modular Frontend (Phase A refactor)
+The original single-file monolith was mechanically split into ES modules. **No logic was changed** — this was verified with an automated splitter (parses every top-level function/const via `acorn`, buckets by concern, auto-generates cross-module `import`/`export` statements, then verifies every one of the 281 top-level entities survives verbatim) plus an extensive live-browser regression pass.
+
+- `frontend/index.html` — same markup as the original body, just with the inline `<style>`/`<script>` replaced by `<link rel="stylesheet" href="css/styles.css">` and `<script type="module" src="js/main.js"></script>`.
+- `frontend/css/styles.css` — extracted inline styles, unchanged.
+- `frontend/js/` — one file per concern: `constants.js`, `state.js`, `parser.js`, `seating.js`, `attendance.js`, `datesheet.js`, `answerbook.js`, `invigilator.js`, `reports.js`, `ui.js`, `storage.js`, plus `main.js` (boot sequence).
+- Run it: `.claude/launch.json` has a `frontend-static` config (`python -m http.server 8765 --directory frontend`), or run that command yourself and open `http://localhost:8765`.
+
+**Critical gotcha for anyone editing these modules — mutable module-level state:**
+The original file was a classic (non-module) script, so every top-level `function`/`var` was implicitly a `window` property, and the ~150 inline `onclick="..."` (and `onchange`/etc.) attributes in the markup could read/call any of them directly. ES modules don't work that way — `main.js` does `Object.assign(window, someMod)` so functions still resolve correctly (function references never change), but a handful of mutable `let` variables (`currentDate`, `summaryDate`, `_currentDsTab`, etc. — see `LIVE_BINDINGS` in `main.js`) get **reassigned** by their owning module after boot. A plain `Object.assign` copy goes stale the instant that happens, and inline HTML attributes have no way to see a module's live `import` binding (they only ever see `window.*`). `main.js` fixes this with `Object.defineProperty(window, name, { get: () => mod[name] })` for each one, proxying through the module's namespace object (which the ES module spec guarantees always reflects the exporter's *current* value). **If you add a new mutable module-level variable that's read from inline markup (any `on*="..."` attribute, static or template-string-generated), add it to `LIVE_BINDINGS` in `main.js` — otherwise it will silently read stale data.**
+
+Two historical monkeypatches from the original file (`selectDate` being wrapped to also call `renderQPLogTable`, `switchPanel` being wrapped to call `showInvStep(1)` for the invigilator panel) were folded directly into their functions' bodies in `ui.js` rather than replicated as a `window.foo = wrapped` reassignment after the fact — this was necessary because several *other* modules call these functions as bare identifiers via their own `import`, and reassigning `window.foo` doesn't affect an already-bound `import` reference in another module.
+
 ## 2) How To Run
-- Start local server from project folder:
-  - `cd /Users/aparnatiwari/Downloads/cbse`
+- **Modular frontend (current):** `python -m http.server 8765 --directory frontend`, open `http://localhost:8765`. (Or use the `frontend-static` launch config.)
+- **Legacy single-file monolith (reference only):**
   - `python3 -m http.server 8765`
-- Open:
-  - `http://localhost:8765/CBSE_Centre_Manager.html`
+  - Open `http://localhost:8765/CBSE_Centre_Manager.html`
 
 ## 3) Core Workflow (User Journey)
 1. Upload class HTML files (X / XII)
