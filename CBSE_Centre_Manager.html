@@ -921,6 +921,15 @@ tbody tr:last-child td { border-bottom: none; }
               <div id="ds-table-x" style="max-height:250px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
               <button onclick="addDsRow('x')" class="btn btn-outline btn-sm" style="margin-top:6px;">+ Add Date</button>
 
+              <div style="margin-top:16px;">
+                <div style="font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📋 Paste Import — Subject Codes</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px;">One line per subject: <code>041 Mathematics Standard</code> (also accepts <code>041,Mathematics Standard</code>)</div>
+                <textarea id="codes-paste-x" rows="5" style="width:100%;font-family:monospace;font-size:11px;border:1px solid #d1d5db;border-radius:6px;padding:6px;box-sizing:border-box;resize:vertical;"
+                  placeholder="041  Mathematics Standard&#10;086  Science&#10;087  Social Science"></textarea>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                  <button onclick="importCodesPaste('x')" class="btn btn-primary btn-sm">⬇ Import</button>
+                </div>
+              </div>
               <div style="margin-top:16px;font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📝 Subject Codes (Class X)</div>
               <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Edit code↔name mapping used for report headers</div>
               <div id="codes-table-x" style="max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
@@ -943,6 +952,15 @@ tbody tr:last-child td { border-bottom: none; }
               <div id="ds-table-xii" style="max-height:250px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
               <button onclick="addDsRow('xii')" class="btn btn-outline btn-sm" style="margin-top:6px;">+ Add Date</button>
 
+              <div style="margin-top:16px;">
+                <div style="font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📋 Paste Import — Subject Codes</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px;">One line per subject: <code>049 Physics</code> (also accepts <code>049,Physics</code>)</div>
+                <textarea id="codes-paste-xii" rows="5" style="width:100%;font-family:monospace;font-size:11px;border:1px solid #d1d5db;border-radius:6px;padding:6px;box-sizing:border-box;resize:vertical;"
+                  placeholder="049  Physics&#10;050  Chemistry&#10;041  Mathematics"></textarea>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                  <button onclick="importCodesPaste('xii')" class="btn btn-primary btn-sm">⬇ Import</button>
+                </div>
+              </div>
               <div style="margin-top:16px;font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📝 Subject Codes (Class XII)</div>
               <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Edit code↔name mapping used for report headers</div>
               <div id="codes-table-xii" style="max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
@@ -1865,7 +1883,7 @@ function newYearReset() {
   setChk('cfg-show-vacant',   cfg.showVacant);
   setChk('cfg-private',       cfg.inclPrivate);
   setChk('cfg-stagger',       cfg.stagger);
-  restoreDsFromConfig(cfg);
+  clearDsConfig();
 
   // Reset UI
   resetUIElements();
@@ -1876,7 +1894,7 @@ function newYearReset() {
 • ${centreName} (${centreCode})
 • ${cfg.rows} rows × ${cfg.cols} cols
 
-Upload new candidate files to begin.`);
+Datesheet & subject codes cleared — enter the new exam's datesheet before uploading candidate files.`);
 }
 
 // ── FULL RESET: Clear absolutely everything ──
@@ -1904,6 +1922,7 @@ function fullReset() {
   ['cfg-centre-name','cfg-centre-code'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  clearDsConfig();
 
   resetUIElements();
   const ind = document.getElementById('save-indicator');
@@ -2005,6 +2024,13 @@ function loadFromBrowser() {
       setVal('cfg-seat-dir',       g.seatDir || 'colwise');
       setChk('cfg-separate-plan',  g.sepPlan);
       setChk('cfg-show-vacant',    g.showVacant);
+      // Restore datesheet & subject codes exactly as saved (including an
+      // intentionally-cleared {} — only skip a field that was never set).
+      const writeDsJSON = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = JSON.stringify(v); };
+      writeDsJSON('cfg-x-datesheet',   g.xDatesheet);
+      writeDsJSON('cfg-xii-datesheet', g.xiiDatesheet);
+      writeDsJSON('cfg-x-codes',       g.xCodes);
+      writeDsJSON('cfg-xii-codes',     g.xiiCodes);
       setChk('cfg-private',        g.inclPrivate);
       setChk('cfg-stagger',         g.stagger);
       // Invigilator requirements
@@ -2076,6 +2102,10 @@ function loadFromBrowser() {
     rebuildAnswerBookRegistry();
     syncLegacySeating();
     state.generated = Object.keys(state.dateStates).some(d => state.dateStates[d].status !== 'empty');
+
+    // Reflect restored datesheet/codes in the Config editor + Datesheet reference panel
+    renderDsTables();
+    fillDatesheetPanel();
 
     return true;
   } catch(e) { console.warn('Restore failed:', e); return false; }
@@ -2291,18 +2321,18 @@ function formatSubjectsForDate(entity, ds, sep) {
 
 // ── HTML PARSER ────────────────────────────────────────────────
 // ── DATESHEET & SUBJECT CODE HELPERS ───────────────────────────
-// Returns active datesheet — stored config overrides hardcoded constants
+// Returns active datesheet — stored config overrides hardcoded constants.
+// An explicitly-cleared datesheet (stored === {}) stays empty; only a truly
+// unset field (stored === null) falls back to the built-in constants.
 function getActiveDatesheet(cls) {
   const cfg = getConfig();
   const stored = cls === 'X' ? cfg.xDatesheet : cfg.xiiDatesheet;
-  return (stored && Object.keys(stored).length > 0) ? stored
-       : (cls === 'X' ? X_DATESHEET : XII_DATESHEET);
+  return stored !== null ? stored : (cls === 'X' ? X_DATESHEET : XII_DATESHEET);
 }
 function getActiveCodes(cls) {
   const cfg = getConfig();
   const stored = cls === 'X' ? cfg.xCodes : cfg.xiiCodes;
-  return (stored && Object.keys(stored).length > 0) ? stored
-       : (cls === 'X' ? X_CODES : XII_CODES);
+  return stored !== null ? stored : (cls === 'X' ? X_CODES : XII_CODES);
 }
 // Build reverse map: code → date
 function buildCodeToDate(cls) {
@@ -8172,6 +8202,34 @@ function importDsPaste(cls) {
   showModal('Imported', `✅ ${Object.keys(data).length} dates imported for Class ${uCls}\n${remapped} candidate(s) remapped to new dates.\n\nSeating regenerated automatically.`);
 }
 
+// ── Paste import — Subject Codes (adds/updates codes, keeps existing ones untouched) ──
+function importCodesPaste(cls) {
+  const ta = document.getElementById(`codes-paste-${cls}`);
+  if (!ta) return;
+  const lines = ta.value.trim().split('\n').filter(l => l.trim());
+  if (!lines.length) return;
+  const data = getCodesData(cls);
+  const errors = [];
+  let added = 0, updated = 0;
+  lines.forEach((line, i) => {
+    // Format: CODE  Subject Name   (also accepts CODE,Subject Name)
+    const m = line.trim().match(/^([A-Za-z0-9]+)[\s,]+(.+)$/);
+    if (!m) { errors.push(`Line ${i+1}: "${line.trim()}" — expected format: CODE Subject Name`); return; }
+    const code = m[1].trim();
+    const name = m[2].trim();
+    if (data[code] !== undefined) updated++; else added++;
+    data[code] = name;
+  });
+  if (errors.length) {
+    showModal('Import Errors', errors.join('\n'));
+    return;
+  }
+  saveCodesData(cls, data);
+  renderCodesTable(cls);
+  ta.value = '';
+  showModal('Imported', `✅ ${added} subject code(s) added, ${updated} updated for Class ${cls.toUpperCase()}.`);
+}
+
 // ── Reset to hardcoded defaults ──
 function resetDsToDefault(cls) {
   if (!confirm(`Reset Class ${cls.toUpperCase()} datesheet to 2026 defaults? This will overwrite your edits.`)) return;
@@ -8193,6 +8251,16 @@ function restoreDsFromConfig(cfg) {
   write('cfg-xii-datesheet', cfg.xiiDatesheet);
   write('cfg-x-codes',       cfg.xCodes);
   write('cfg-xii-codes',     cfg.xiiCodes);
+}
+
+// ── Wipe datesheet/codes back to a genuinely empty state (used on reset for a new exam) ──
+function clearDsConfig() {
+  ['cfg-x-datesheet','cfg-xii-datesheet','cfg-x-codes','cfg-xii-codes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '{}';
+  });
+  renderDsTables();
+  fillDatesheetPanel();
 }
 
 function debugStorage() {
