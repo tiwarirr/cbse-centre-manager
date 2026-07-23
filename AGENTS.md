@@ -6,7 +6,7 @@ This document is a working handover for future coding sessions on this project.
 - Project: **CBSE Centre Management System**
 - Legacy main file (kept for reference, no longer the active app): `CBSE_Centre_Manager.html`
 - **Active frontend as of the Phase A modular refactor: `frontend/`** — see §1a.
-- Runtime: browser-only (no backend yet — a SQLite/Flask backend on PythonAnywhere is planned; see the multi-phase plan below).
+- Runtime: browser-only frontend + a SQLite/Flask backend under `backend/` (Phase B/C of the multi-phase plan — see §1b). Not yet wired together: `frontend/js/storage.js` still only talks to localStorage; the API exists and is tested standalone but the frontend sync layer is future work.
 - External dependency: XLSX via CDN (`xlsx.full.min.js`) for Excel exports.
 
 ## 1a) Modular Frontend (Phase A refactor)
@@ -21,6 +21,25 @@ The original single-file monolith was mechanically split into ES modules. **No l
 The original file was a classic (non-module) script, so every top-level `function`/`var` was implicitly a `window` property, and the ~150 inline `onclick="..."` (and `onchange`/etc.) attributes in the markup could read/call any of them directly. ES modules don't work that way — `main.js` does `Object.assign(window, someMod)` so functions still resolve correctly (function references never change), but a handful of mutable `let` variables (`currentDate`, `summaryDate`, `_currentDsTab`, etc. — see `LIVE_BINDINGS` in `main.js`) get **reassigned** by their owning module after boot. A plain `Object.assign` copy goes stale the instant that happens, and inline HTML attributes have no way to see a module's live `import` binding (they only ever see `window.*`). `main.js` fixes this with `Object.defineProperty(window, name, { get: () => mod[name] })` for each one, proxying through the module's namespace object (which the ES module spec guarantees always reflects the exporter's *current* value). **If you add a new mutable module-level variable that's read from inline markup (any `on*="..."` attribute, static or template-string-generated), add it to `LIVE_BINDINGS` in `main.js` — otherwise it will silently read stale data.**
 
 Two historical monkeypatches from the original file (`selectDate` being wrapped to also call `renderQPLogTable`, `switchPanel` being wrapped to call `showInvStep(1)` for the invigilator panel) were folded directly into their functions' bodies in `ui.js` rather than replicated as a `window.foo = wrapped` reassignment after the fact — this was necessary because several *other* modules call these functions as bare identifiers via their own `import`, and reassigning `window.foo` doesn't affect an already-bound `import` reference in another module.
+
+## 1b) Backend API (Phase B/C — SQLite + Flask, standalone-tested, not yet wired to the frontend)
+
+`backend/` is a Flask + SQLAlchemy + Flask-Migrate app implementing the single-centre, single-login backend from the migration plan.
+
+- `backend/models.py` — 17-table relational schema: `users` (one shared login), `sessions` (one row per centre code, mirrors `getConfig()` + centre identity fields — including `centre_head`/`centre_city`/`paper_size`/`colour_theme`/`include_citation`, which the original frontend read back on load but **never actually saved**; this schema fixes that gap), `candidates` + `candidate_subjects`, `date_states` + `seating_assignments` + `attendance`, and the answer-book cluster (`ab_types`, `ab_subject_type_map`, `ab_supp_class_type_map`, `ab_receipts`, `ab_receipt_exceptions`, `ab_assignments`, `ab_damaged_serials`, `ab_supp_assignments`, `ab_supp_damaged_serials`, `ab_audit_log`). `serialRegistry` is deliberately **not** a table — it's a derived cache client-side (`rebuildAnswerBookRegistry()`) and the API reconstructs it the same way (always returns `{}`, matching `getAnswerBookForPersistence()`).
+- `backend/api/sessions.py` — `GET /api/sessions` (list), `GET/PUT/DELETE /api/sessions/<centre_code>`. **Design principle: decompose into relational tables on write, reconstruct the exact JSON shape the frontend already builds/consumes on read** (`session_to_payload()` / the `_insert_*` helpers), so `storage.js` can eventually swap `localStorage.setItem/getItem` for `fetch()` calls with minimal reshaping. Verified via a full round-trip test (complex payload covering candidates/seating/attendance/answer-book → PUT → GET → diffed field-by-field against the original — matched exactly except one intentionally-dropped empty-string mapping).
+- `backend/auth.py` — `POST /api/auth/login {password}` / `logout` / `GET status`, single shared user (Werkzeug password hash), Flask signed-cookie session. All `/api/sessions/*` routes are gated via a `before_request` hook.
+- Run locally:
+  ```
+  cd backend
+  python -m venv .venv && ./.venv/Scripts/python -m pip install -r requirements.txt   # (or .venv/bin/python on macOS/Linux)
+  export FLASK_APP=app.py
+  ./.venv/Scripts/python -m flask db upgrade      # creates instance/cbse.sqlite3 from migrations/
+  ./.venv/Scripts/python -m flask create-admin    # interactive; or seed a User row directly for scripting/tests
+  ./.venv/Scripts/python wsgi.py                  # serves http://127.0.0.1:5000
+  ```
+- `backend/instance/` (the SQLite file) and `backend/.venv/` are gitignored — never commit them.
+- **Not done yet:** `frontend/js/storage.js` still only reads/writes `localStorage` — none of this backend is called from the browser yet. That's the remaining Phase C work (offline-first sync layer: debounced `PUT`, `savedAt`-based conflict prompt on load, keeping `localStorage` authoritative for instant offline edits).
 
 ## 2) How To Run
 - **Modular frontend (current):** `python -m http.server 8765 --directory frontend`, open `http://localhost:8765`. (Or use the `frontend-static` launch config.)

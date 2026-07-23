@@ -1,0 +1,13 @@
+# Node (test tooling)
+node_modules/
+
+# Python backend
+backend/.venv/
+backend/instance/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+
+# Editor/OS
+.DS_Store
+Thumbs.db
