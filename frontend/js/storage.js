@@ -1,9 +1,13 @@
 // ============================================================
 // storage.js — extracted from CBSE_Centre_Manager.html (Phase A modular split)
+// Phase C: offline-first sync layer added on top — localStorage stays the
+// authoritative local store (every existing call site keeps working exactly
+// as before, including with no backend running at all); a debounced
+// background layer additionally pushes to the Flask/SQLite API when reachable.
 // ============================================================
 import { getAnswerBookForPersistence, rebuildAnswerBookRegistry } from './answerbook.js';
 import { clearDsConfig, fillDatesheetPanel, renderDsTables } from './datesheet.js';
-import { sortDates } from './parser.js';
+import { parseHTML, sortDates } from './parser.js';
 import { buildSlimDateStates, defaultAnswerBookState, ensureAnswerBookState, getConfig, state, syncLegacySeating } from './state.js';
 import { buildCandidatesTable, buildDateTabs, buildScheduleTable, buildSummaryDateTabs, showModal, switchPanel } from './ui.js';
 
@@ -120,52 +124,68 @@ export function loadSelectedSession() {
     showModal('Load Failed', 'Could not load the selected session.');
   }
 }
+
+// ── Shared payload builder ──────────────────────────────────────
+// Used by saveToBrowser() (localStorage), downloadBackup() (JSON file), and
+// syncNow() (API) so all three stay in lockstep. Previously saveToBrowser and
+// downloadBackup built two subtly-different payloads (downloadBackup dropped
+// invReq entirely) and neither included centreHead/centreCity/paperSize/
+// colourTheme/includeCitation — those fields were read back on load but never
+// actually saved anywhere. Fixed here, once, for all three consumers.
+function buildSessionPayload() {
+  let centreCode = document.getElementById('cfg-centre-code')?.value || '';
+  let centreName = document.getElementById('cfg-centre-name')?.value || '';
+  if ((!centreCode || !centreName) && state.rawHTML) {
+    const htmlSrc = state.rawHTML['12'] || state.rawHTML['10'];
+    const info = extractCentreInfoFromHTML(htmlSrc);
+    if (info) {
+      centreCode = centreCode || info.code;
+      centreName = centreName || info.name;
+      applyCentreInfoToUI(info, { onlyIfEmpty: true, updateSidebar: false });
+    }
+  }
+  return {
+    globalCfg:      getConfig(),
+    invReq:         state.invReq || {},
+    centreName,
+    centreCode,
+    centreHead:     document.getElementById('cfg-centre-head')?.value || '',
+    centreCity:     document.getElementById('cfg-centre-city')?.value || '',
+    paperSize:      document.getElementById('cfg-paper')?.value || 'A4',
+    colourTheme:    document.getElementById('cfg-colour')?.value || 'colour',
+    includeCitation: document.getElementById('cfg-citation')?.checked ?? true,
+    candidates:     state.candidates,
+    dateStates:     buildSlimDateStates(state.dateStates),
+    qpLog:          state.qpLog,
+    answerBook:     getAnswerBookForPersistence(),
+    savedAt:        Date.now(),
+    payloadVer:     3,
+  };
+}
+
 export function saveToBrowser() {
   try {
-    let centreCode = document.getElementById('cfg-centre-code')?.value || '';
-    let centreName = document.getElementById('cfg-centre-name')?.value || '';
-    // If fields empty but rawHTML in memory, extract now
-    if ((!centreCode || !centreName) && state.rawHTML) {
-      const htmlSrc = state.rawHTML['12'] || state.rawHTML['10'];
-      const info = extractCentreInfoFromHTML(htmlSrc);
-      if (info) {
-        centreCode = centreCode || info.code;
-        centreName = centreName || info.name;
-        applyCentreInfoToUI(info, { onlyIfEmpty: true, updateSidebar: false });
-      }
-    }
+    const payload = buildSessionPayload();
+    const { centreCode } = payload;
     // Don't save a blank session — would overwrite real saved data with empty key
     if (!centreCode && !state.candidates.length) return;
     const key = getCentreStorageKey(centreCode);
-    const now = Date.now();
-    const slimDateStates = buildSlimDateStates(state.dateStates);
-
-    const payload = {
-      globalCfg:    getConfig(),
-      invReq:       state.invReq || {},
-      centreName,
-      centreCode,
-      candidates:   state.candidates,
-      dateStates:   slimDateStates,
-      qpLog:        state.qpLog,
-      answerBook:   getAnswerBookForPersistence(),
-      savedAt:      now,
-      payloadVer:   3,
-    };
 
     localStorage.setItem(key, JSON.stringify(payload));
+    _lastKnownSavedAt = payload.savedAt;
 
     // Update save indicator
     const ind = document.getElementById('save-indicator');
     const tim = document.getElementById('save-time');
     if (ind && tim) {
-      const t = new Date(now);
+      const t = new Date(payload.savedAt);
       const hh = String(t.getHours()).padStart(2,'0');
       const mm = String(t.getMinutes()).padStart(2,'0');
       tim.textContent = `Saved ${hh}:${mm}`;
       ind.style.display = 'flex';
     }
     refreshSessionSelector(key);
+    scheduleSync();
   } catch(e) {
     console.warn('Save failed:', e);
     // Show visible error — do NOT silently swallow QuotaExceededError
@@ -182,31 +202,18 @@ export function saveToBrowser() {
 // ── BACKUP: Download JSON file ──
 export function downloadBackup() {
   try {
-    const centreCode = document.getElementById('cfg-centre-code')?.value || 'default';
-    const centreName = document.getElementById('cfg-centre-name')?.value || '';
-    const now = Date.now();
-    const slimDS = buildSlimDateStates(state.dateStates);
-    const payload = {
-      globalCfg:    getConfig(),
-      centreName,
-      centreCode,
-      candidates:   state.candidates,
-      dateStates:   slimDS,
-      qpLog:        state.qpLog,
-      answerBook:   getAnswerBookForPersistence(),
-      savedAt:      now,
-      backupVersion: 3,
-    };
+    const payload = buildSessionPayload();
+    const { centreCode } = payload;
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    const d    = new Date(now);
+    const d    = new Date(payload.savedAt);
     const ds   = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
     a.href     = url;
-    a.download = `CBSE_Backup_${centreCode}_${ds}.json`;
+    a.download = `CBSE_Backup_${centreCode || 'default'}_${ds}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    saveToBrowser(); // also update localStorage
+    saveToBrowser(); // also update localStorage (+ schedules a sync)
   } catch(e) { showModal('Backup Failed', 'Could not create backup: ' + e.message); }
 }
 // ── RESTORE: Trigger file picker ──
@@ -258,6 +265,7 @@ This will replace all current data.`)) return;
         showModal('Restored', `Session restored from backup.
 Centre: ${centre}
 Original save: ${savedAt}`);
+        scheduleSync();
       }
     } catch(err) { showModal('Restore Failed', 'Could not read backup file: ' + err.message); }
   };
@@ -315,14 +323,15 @@ export function newYearReset() {
 • ${cfg.rows} rows × ${cfg.cols} cols
 
 Datesheet & subject codes cleared — enter the new exam's datesheet before uploading candidate files.`);
+  deleteServerSession(centreCode);
 }
 // ── FULL RESET: Clear absolutely everything ──
 export function fullReset() {
   if (!confirm('FULL RESET: Clears ALL data including candidates, seating, attendance, config and saved session. Cannot be undone.')) return;
 
   // Clear localStorage
+  const centreCode = document.getElementById('cfg-centre-code')?.value || 'default';
   try {
-    const centreCode = document.getElementById('cfg-centre-code')?.value || 'default';
     localStorage.removeItem(getCentreStorageKey(centreCode));
     localStorage.removeItem(getCentreStorageKey('default'));
   } catch(e) {}
@@ -348,6 +357,7 @@ export function fullReset() {
   if (ind) ind.style.display = 'none';
   refreshSessionSelector();
   switchPanel('upload');
+  deleteServerSession(centreCode);
 }
 // ── Shared UI reset helper ──
 export function resetUIElements() {
@@ -381,10 +391,116 @@ export function resetUIElements() {
   if (sbInfo) sbInfo.textContent = 'No centre loaded';
   switchPanel('upload');
 }
+
+// ── Apply a parsed session payload (from localStorage OR the server) to
+// state + UI. Factored out of loadFromBrowser() so the server-conflict-load
+// path (loadFromServer, below) doesn't duplicate ~100 lines of restore logic. ──
+function applySessionPayload(payload) {
+  if (payload.globalCfg) {
+    const g = payload.globalCfg;
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
+    const setChk = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.checked = v; };
+    const savedCode = payload.centreCode && payload.centreCode !== 'default' ? payload.centreCode : '';
+    const savedName = payload.centreName || '';
+    if (savedCode && savedName) {
+      setVal('cfg-centre-name', savedName);
+      setVal('cfg-centre-code', savedCode);
+    } else {
+      let extracted = false;
+      const htmlSrc = payload.rawHTML && (payload.rawHTML['12'] || payload.rawHTML['10']);
+      const info = extractCentreInfoFromHTML(htmlSrc);
+      if (info) {
+        setVal('cfg-centre-code', info.code);
+        setVal('cfg-centre-name', info.name);
+        extracted = true;
+      }
+      if (!extracted) {
+        setVal('cfg-centre-name', savedName);
+        setVal('cfg-centre-code', savedCode);
+      }
+    }
+    setVal('cfg-rows',           g.rows);
+    setVal('cfg-cols',           g.cols);
+    setVal('cfg-class-order',    g.classOrder);
+    setVal('cfg-split',          g.split);
+    setVal('cfg-seat-dir',       g.seatDir || 'colwise');
+    setChk('cfg-separate-plan',  g.sepPlan);
+    setChk('cfg-show-vacant',    g.showVacant);
+    const writeDsJSON = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = JSON.stringify(v); };
+    writeDsJSON('cfg-x-datesheet',   g.xDatesheet);
+    writeDsJSON('cfg-xii-datesheet', g.xiiDatesheet);
+    writeDsJSON('cfg-x-codes',       g.xCodes);
+    writeDsJSON('cfg-xii-codes',     g.xiiCodes);
+    setChk('cfg-private',        g.inclPrivate);
+    setChk('cfg-stagger',         g.stagger);
+    if (payload.invReq) state.invReq = payload.invReq;
+    if (payload.centreHead) document.getElementById('cfg-centre-head') && (document.getElementById('cfg-centre-head').value = payload.centreHead);
+    if (payload.centreCity) document.getElementById('cfg-centre-city') && (document.getElementById('cfg-centre-city').value = payload.centreCity);
+    if (payload.paperSize) document.getElementById('cfg-paper') && (document.getElementById('cfg-paper').value = payload.paperSize);
+    if (payload.colourTheme) document.getElementById('cfg-colour') && (document.getElementById('cfg-colour').value = payload.colourTheme);
+    if (payload.includeCitation !== undefined) document.getElementById('cfg-citation') && (document.getElementById('cfg-citation').checked = payload.includeCitation);
+    if (g.examYear)       setVal('cfg-exam-year',         g.examYear);
+    if (g.examNameX)      setVal('cfg-exam-name-x',       g.examNameX);
+    if (g.examNameXII)    setVal('cfg-exam-name-xii',     g.examNameXII);
+    if (g.examFullNameX)  setVal('cfg-exam-fullname-x',   g.examFullNameX);
+    if (g.examFullNameXII)setVal('cfg-exam-fullname-xii', g.examFullNameXII);
+    const badge = document.getElementById('sb-logo-badge');
+    if (badge && g.examYear) badge.textContent = `CBSE ${g.examYear}`;
+  }
+
+  if (payload.candidates && payload.candidates.length) {
+    state.candidates = payload.candidates;
+  } else if (payload.rawHTML) {
+    state.rawHTML = payload.rawHTML;
+    const candidates = [];
+    if (payload.rawHTML['12']) candidates.push(...parseHTML(payload.rawHTML['12'], 'XII'));
+    if (payload.rawHTML['10']) candidates.push(...parseHTML(payload.rawHTML['10'], 'X'));
+    state.candidates = candidates;
+  }
+
+  if (state.candidates.length) {
+    state.schools = {};
+    state.candidates.forEach(cand => {
+      if (!state.schools[cand.schoolCode])
+        state.schools[cand.schoolCode] = { name: cand.schoolName, x: new Set(), xii: new Set() };
+      state.schools[cand.schoolCode][cand.class === 'X' ? 'x' : 'xii'].add(cand.roll);
+    });
+    const datesSet = new Set();
+    state.candidates.forEach(cand => Object.keys(cand.dateSubjects).forEach(d => datesSet.add(d)));
+    state.allDates = sortDates([...datesSet]);
+  }
+
+  if (payload.qpLog) state.qpLog = payload.qpLog;
+  state.answerBook = payload.answerBook || defaultAnswerBookState();
+  ensureAnswerBookState();
+  if (payload.dateStates) {
+    state.dateStates = payload.dateStates;
+    const candLookup = {};
+    state.candidates.forEach(cand => { candLookup[cand.roll] = cand; });
+    Object.values(state.dateStates).forEach(st => {
+      (st.seating || []).forEach(s => {
+        const full = candLookup[s.roll];
+        if (full) {
+          s.dateSubjects = full.dateSubjects;
+          s.mother       = full.mother;
+          s.father       = full.father;
+          s.sex          = full.sex;
+          s.cat          = full.cat;
+        }
+      });
+    });
+  }
+  rebuildAnswerBookRegistry();
+  syncLegacySeating();
+  state.generated = Object.keys(state.dateStates).some(d => state.dateStates[d].status !== 'empty');
+  _lastKnownSavedAt = payload.savedAt || 0;
+
+  renderDsTables();
+  fillDatesheetPanel();
+}
+
 export function loadFromBrowser() {
   try {
-    // Scan all cbse_centre_* keys, pick most recently saved
-    // (don't rely on UI field being populated yet — it's empty on first load)
     let raw = null;
     if (_forceLoadStorageKey) {
       raw = localStorage.getItem(_forceLoadStorageKey);
@@ -403,127 +519,7 @@ export function loadFromBrowser() {
       }
     } catch(e) {}
     if (!raw) return false;
-    const payload = JSON.parse(raw);
-
-    // ── Restore global config into UI ──
-    if (payload.globalCfg) {
-      const g = payload.globalCfg;
-      const setVal = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
-      const setChk = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.checked = v; };
-      // Restore centre name/code
-      const savedCode = payload.centreCode && payload.centreCode !== 'default' ? payload.centreCode : '';
-      const savedName = payload.centreName || '';
-      if (savedCode && savedName) {
-        // v2: explicitly stored
-        setVal('cfg-centre-name', savedName);
-        setVal('cfg-centre-code', savedCode);
-      } else {
-        // Try v1 rawHTML extraction first
-        let extracted = false;
-        const htmlSrc = payload.rawHTML && (payload.rawHTML['12'] || payload.rawHTML['10']);
-        const info = extractCentreInfoFromHTML(htmlSrc);
-        if (info) {
-          setVal('cfg-centre-code', info.code);
-          setVal('cfg-centre-name', info.name);
-          extracted = true;
-        }
-        // v2 fallback: try CENTRE pattern from first candidate's raw context
-        // or just set whatever was saved (may be empty — user can type it in)
-        if (!extracted) {
-          setVal('cfg-centre-name', savedName);
-          setVal('cfg-centre-code', savedCode);
-        }
-      }
-      setVal('cfg-rows',           g.rows);
-      setVal('cfg-cols',           g.cols);
-      setVal('cfg-class-order',    g.classOrder);
-      setVal('cfg-split',          g.split);
-      setVal('cfg-seat-dir',       g.seatDir || 'colwise');
-      setChk('cfg-separate-plan',  g.sepPlan);
-      setChk('cfg-show-vacant',    g.showVacant);
-      // Restore datesheet & subject codes exactly as saved (including an
-      // intentionally-cleared {} — only skip a field that was never set).
-      const writeDsJSON = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = JSON.stringify(v); };
-      writeDsJSON('cfg-x-datesheet',   g.xDatesheet);
-      writeDsJSON('cfg-xii-datesheet', g.xiiDatesheet);
-      writeDsJSON('cfg-x-codes',       g.xCodes);
-      writeDsJSON('cfg-xii-codes',     g.xiiCodes);
-      setChk('cfg-private',        g.inclPrivate);
-      setChk('cfg-stagger',         g.stagger);
-      // Invigilator requirements
-      if (payload.invReq) state.invReq = payload.invReq;
-      // Centre head / city
-      if (payload.centreHead) document.getElementById('cfg-centre-head') && (document.getElementById('cfg-centre-head').value = payload.centreHead);
-      if (payload.centreCity) document.getElementById('cfg-centre-city') && (document.getElementById('cfg-centre-city').value = payload.centreCity);
-      // Exam identity fields
-      if (g.examYear)       setVal('cfg-exam-year',         g.examYear);
-      if (g.examNameX)      setVal('cfg-exam-name-x',       g.examNameX);
-      if (g.examNameXII)    setVal('cfg-exam-name-xii',     g.examNameXII);
-      if (g.examFullNameX)  setVal('cfg-exam-fullname-x',   g.examFullNameX);
-      if (g.examFullNameXII)setVal('cfg-exam-fullname-xii', g.examFullNameXII);
-      // Update sidebar badge to match restored exam year
-      const badge = document.getElementById('sb-logo-badge');
-      if (badge && g.examYear) badge.textContent = `CBSE ${g.examYear}`;
-      // per-room handled below
-    }
-
-    // ── Restore candidates (v2: stored directly; v1: re-parse from rawHTML) ──
-    if (payload.candidates && payload.candidates.length) {
-      // v2 payload — candidates stored directly, fast restore
-      state.candidates = payload.candidates;
-    } else if (payload.rawHTML) {
-      // v1 legacy payload — re-parse from raw HTML
-      state.rawHTML = payload.rawHTML;
-      const candidates = [];
-      if (payload.rawHTML['12']) candidates.push(...parseHTML(payload.rawHTML['12'], 'XII'));
-      if (payload.rawHTML['10']) candidates.push(...parseHTML(payload.rawHTML['10'], 'X'));
-      state.candidates = candidates;
-    }
-
-    if (state.candidates.length) {
-      // Rebuild schools index
-      state.schools = {};
-      state.candidates.forEach(cand => {
-        if (!state.schools[cand.schoolCode])
-          state.schools[cand.schoolCode] = { name: cand.schoolName, x: new Set(), xii: new Set() };
-        state.schools[cand.schoolCode][cand.class === 'X' ? 'x' : 'xii'].add(cand.roll);
-      });
-      // Rebuild allDates
-      const datesSet = new Set();
-      state.candidates.forEach(cand => Object.keys(cand.dateSubjects).forEach(d => datesSet.add(d)));
-      state.allDates = sortDates([...datesSet]);
-    }
-
-    // ── Restore dateStates (seating + attendance + lock status) ──
-    if (payload.qpLog) state.qpLog = payload.qpLog;
-    state.answerBook = payload.answerBook || defaultAnswerBookState();
-    ensureAnswerBookState();
-    if (payload.dateStates) {
-      state.dateStates = payload.dateStates;
-      // Re-attach full candidate fields to slim seated objects
-      const candLookup = {};
-      state.candidates.forEach(cand => { candLookup[cand.roll] = cand; });
-      Object.values(state.dateStates).forEach(st => {
-        (st.seating || []).forEach(s => {
-          const full = candLookup[s.roll];
-          if (full) {
-            s.dateSubjects = full.dateSubjects;
-            s.mother       = full.mother;
-            s.father       = full.father;
-            s.sex          = full.sex;
-            s.cat          = full.cat;
-          }
-        });
-      });
-    }
-    rebuildAnswerBookRegistry();
-    syncLegacySeating();
-    state.generated = Object.keys(state.dateStates).some(d => state.dateStates[d].status !== 'empty');
-
-    // Reflect restored datesheet/codes in the Config editor + Datesheet reference panel
-    renderDsTables();
-    fillDatesheetPanel();
-
+    applySessionPayload(JSON.parse(raw));
     return true;
   } catch(e) { console.warn('Restore failed:', e); return false; }
 }
@@ -661,5 +657,178 @@ export function doRestoreSession() {
     if (sub && payload) {
       sub.textContent = `${payload.centreName || payload.centreCode || ''} · Session restored · ${savedAt}`;
     }
+    checkServerForNewerSession();
   }
+}
+
+// ================================================================
+// ── OFFLINE-FIRST SYNC LAYER (Phase C) ──────────────────────────
+// localStorage (above) remains authoritative and is never made to depend on
+// network reachability. Everything below is best-effort: on any failure
+// (offline, backend not running, not logged in) it degrades to "keep using
+// localStorage" without throwing or blocking the caller.
+// ================================================================
+const API_BASE = window.__API_BASE__ || '/api';
+const SYNC_DEBOUNCE_MS = 5000;
+const SYNC_MAX_WAIT_MS = 30000;
+
+let _dirty = false;
+let _dirtySince = 0;
+let _syncTimer = null;
+let _syncInFlight = false;
+let _loggedIn = null;       // null = unknown/not yet checked, true/false once known
+let _lastKnownSavedAt = 0;  // savedAt of whatever we last loaded/saved locally
+
+async function apiFetch(path, opts) {
+  try {
+    const res = await fetch(API_BASE + path, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+    });
+    let data = null;
+    try { data = await res.json(); } catch(e) {}
+    return { ok: res.ok, status: res.status, data };
+  } catch(e) {
+    return { ok: false, status: 0, data: null, networkError: true };
+  }
+}
+
+function setSyncStatusText(text) {
+  const tim = document.getElementById('save-time');
+  if (!tim) return;
+  const base = tim.textContent.split(' · ')[0];
+  tim.textContent = `${base} · ${text}`;
+}
+
+export async function checkAuthStatus() {
+  const res = await apiFetch('/auth/status', { method: 'GET' });
+  _loggedIn = res.ok ? !!res.data?.loggedIn : false;
+  return _loggedIn;
+}
+
+export async function loginWithPassword(password) {
+  const res = await apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ password }) });
+  _loggedIn = res.ok;
+  return res.ok;
+}
+
+export async function logoutOfServer() {
+  await apiFetch('/auth/logout', { method: 'POST' });
+  _loggedIn = false;
+}
+
+// Prompts for the shared password at most once per page load; a wrong
+// password or a "not now" cancel just leaves syncing disabled until refresh.
+let _loginPromptShown = false;
+async function ensureLoggedIn() {
+  if (_loggedIn === true) return true;
+  if (_loggedIn === null) await checkAuthStatus();
+  if (_loggedIn === true) return true;
+  if (_loginPromptShown) return false;
+  _loginPromptShown = true;
+  const password = prompt('Sign in to sync this session to the server (leave blank to stay offline-only):');
+  if (!password) return false;
+  const ok = await loginWithPassword(password);
+  if (!ok) showModal('Sign-in Failed', 'Incorrect password — continuing in offline (localStorage-only) mode.');
+  return ok;
+}
+
+function currentCentreCode() {
+  return document.getElementById('cfg-centre-code')?.value || '';
+}
+
+function scheduleSync() {
+  _dirty = true;
+  if (!_dirtySince) _dirtySince = Date.now();
+  if (_syncTimer) clearTimeout(_syncTimer);
+  const elapsed = Date.now() - _dirtySince;
+  const wait = Math.max(0, Math.min(SYNC_DEBOUNCE_MS, SYNC_MAX_WAIT_MS - elapsed));
+  _syncTimer = setTimeout(syncNow, wait);
+}
+
+export async function syncNow() {
+  if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
+  if (_syncInFlight || !_dirty) return;
+  const centreCode = currentCentreCode();
+  if (!centreCode) return;
+
+  _syncInFlight = true;
+  try {
+    const loggedIn = await ensureLoggedIn();
+    if (!loggedIn) { setSyncStatusText('offline (not signed in)'); return; }
+
+    const payload = buildSessionPayload();
+    const res = await apiFetch(`/sessions/${encodeURIComponent(centreCode)}`, {
+      method: 'PUT', body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      _dirty = false; _dirtySince = 0;
+      setSyncStatusText('synced ✓');
+    } else if (res.status === 401) {
+      _loggedIn = false;
+      setSyncStatusText('offline (not signed in)');
+    } else if (res.networkError) {
+      setSyncStatusText('offline — will retry');
+      scheduleSync();
+    } else {
+      setSyncStatusText('sync pending…');
+      scheduleSync();
+    }
+  } finally {
+    _syncInFlight = false;
+  }
+}
+
+function deleteServerSession(centreCode) {
+  if (!centreCode || _loggedIn !== true) return;
+  apiFetch(`/sessions/${encodeURIComponent(centreCode)}`, { method: 'DELETE' });
+}
+
+// Called after a local session is restored (Continue Session banner, or
+// selecting a session from the dropdown): if the server has a newer copy of
+// this same centre's session (e.g. saved from another device/browser), offer
+// to pull it in rather than silently overwriting it on the next sync.
+export async function checkServerForNewerSession() {
+  const centreCode = currentCentreCode();
+  if (!centreCode) return;
+  const loggedIn = await ensureLoggedIn();
+  if (!loggedIn) return;
+
+  const res = await apiFetch(`/sessions/${encodeURIComponent(centreCode)}`, { method: 'GET' });
+  if (!res.ok || !res.data) return;
+  const serverPayload = res.data;
+  if (!serverPayload.savedAt || serverPayload.savedAt <= _lastKnownSavedAt) return;
+
+  const when = new Date(serverPayload.savedAt).toLocaleString('en-IN');
+  if (!confirm(`A newer version of this session was saved on the server at ${when} (e.g. from another device). Load it now? Any local changes made since your last sync will be replaced.`)) {
+    return;
+  }
+  applySessionPayload(serverPayload);
+  restoreUIAfterLoad();
+  refreshSessionSelector();
+  showModal('Loaded from Server', `Session restored from the server copy saved ${when}.`);
+}
+
+// Registers the sync layer's own event listeners. Called once from main.js's
+// boot sequence (kept out of this module's top level — like every other
+// module here, storage.js should have no side effects just from being
+// imported; all wiring happens in main.js).
+export function initSyncListeners() {
+  // Best-effort flush when the tab is hidden/closed. `keepalive` lets the
+  // request outlive page teardown (similar to sendBeacon, but PUT-capable);
+  // it has a small body-size ceiling, so for very large sessions this may
+  // silently fail — acceptable since localStorage already has the full data
+  // and the next successful sync will catch it up.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden' || !_dirty) return;
+    const centreCode = currentCentreCode();
+    if (!centreCode || _loggedIn !== true) return;
+    const payload = buildSessionPayload();
+    fetch(`${API_BASE}/sessions/${encodeURIComponent(centreCode)}`, {
+      method: 'PUT', credentials: 'include', keepalive: true,
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    }).catch(() => {});
+  });
+  window.addEventListener('online', () => { if (_dirty) syncNow(); });
 }

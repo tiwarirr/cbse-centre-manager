@@ -1,7 +1,7 @@
 // ============================================================
 // datesheet.js — extracted from CBSE_Centre_Manager.html (Phase A modular split)
 // ============================================================
-import { dayName, getActiveCodes, getActiveDatesheet, parseDate, sortDates } from './parser.js';
+import { dayName, getActiveCodes, getActiveDatesheet, parseDate, parseHTML, sortDates } from './parser.js';
 import { generateSeating, resetCustomOrder } from './seating.js';
 import { state } from './state.js';
 import { restoreUIAfterLoad, saveToBrowser } from './storage.js';

@@ -19,6 +19,7 @@ import * as storageMod from './storage.js';
 // reads `currentDate` directly; the `Object.assign(window, uiMod)` below only
 // snapshots its value once at boot and would not track later updates.
 import { currentDate } from './ui.js';
+import { initSyncListeners } from './storage.js';
 
 Object.assign(window, constantsMod);
 Object.assign(window, stateMod);
@@ -152,3 +153,7 @@ document.addEventListener('visibilitychange', () => {
     try { saveToBrowser(); } catch (e) {}
   }
 });
+
+// Phase C: wire up the offline-first background sync listeners (best-effort
+// flush on tab-hide, retry-on-reconnect). See storage.js's initSyncListeners().
+initSyncListeners();
