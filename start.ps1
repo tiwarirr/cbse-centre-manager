@@ -7,7 +7,7 @@ $backend = Join-Path $PSScriptRoot "backend"
 Set-Location $backend
 
 if (-not (Test-Path ".\.venv\Scripts\Activate.ps1")) {
-    Write-Host "No virtual environment found at backend\.venv — setting one up..." -ForegroundColor Yellow
+    Write-Host "No virtual environment found at backend\.venv - setting one up..." -ForegroundColor Yellow
     python -m venv .venv
     & .\.venv\Scripts\Activate.ps1
     python -m pip install --quiet --upgrade pip
@@ -18,12 +18,12 @@ if (-not (Test-Path ".\.venv\Scripts\Activate.ps1")) {
 
 $env:FLASK_APP = "app.py"
 
-# Idempotent — only applies migrations that haven't run yet. Creates
+# Idempotent - only applies migrations that haven't run yet. Creates
 # instance\cbse.sqlite3 on first run.
 flask db upgrade
 
 if (-not (Test-Path ".\instance\cbse.sqlite3")) {
-    Write-Host "Fresh database — no login exists yet. Create one now:" -ForegroundColor Yellow
+    Write-Host "Fresh database - no login exists yet. Create one now:" -ForegroundColor Yellow
     flask create-admin
 }
 
