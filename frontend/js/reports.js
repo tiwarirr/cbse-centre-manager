@@ -2351,8 +2351,12 @@ export function printDisplayPlan() {
     .dp-xcell { border:1px solid #000;height:${rowH}mm;padding:0;
                 background:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%25%27 height=%27100%25%27%3E%3Cline x1=%270%27 y1=%270%27 x2=%27100%25%27 y2=%27100%25%27 stroke=%27%23bbb%27 stroke-width=%271.2%27/%3E%3Cline x1=%27100%25%27 y1=%270%27 x2=%270%27 y2=%27100%25%27 stroke=%27%23bbb%27 stroke-width=%271.2%27/%3E%3C/svg%3E") no-repeat center/100% 100%;
                 -webkit-print-color-adjust:exact;print-color-adjust:exact; }
-    .dp-roll span { font-size:21pt;font-weight:bold;font-family:'Courier New',monospace;
+    .dp-cell-inner { display:flex;flex-direction:column;align-items:center;justify-content:center;
+                    height:100%;line-height:1; }
+    .dp-num { font-size:21pt;font-weight:bold;font-family:'Courier New',monospace;
                     color:#000;letter-spacing:0.5px;line-height:1; }
+    .dp-sub { font-size:8pt;font-weight:bold;color:#000;margin-top:2px;letter-spacing:0.3px;
+                    max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
   `;
   document.head.appendChild(style);
 
@@ -2362,6 +2366,11 @@ export function printDisplayPlan() {
     if (!fullSeatMap[s.roomNo]) fullSeatMap[s.roomNo] = {};
     fullSeatMap[s.roomNo][s.seatInRoom] = s;
   });
+
+  // ── Cell content options (read from toolbar checkbox) ──
+  function getOpts() {
+    return { showSubject: document.getElementById('dp-opt-subject')?.checked ?? false };
+  }
 
   // ── Build overlay ──
   const overlayId = 'display-plan-overlay';
@@ -2392,19 +2401,28 @@ export function printDisplayPlan() {
     'padding:10px 20px;display:flex;align-items:center;justify-content:space-between;' +
     'font-family:Arial,sans-serif;font-size:13px;';
   toolbar.innerHTML = `<span>🪑 Display Seating Plan — ${ds} · ${roomNos.length} rooms</span>
-    <div style="display:flex;gap:10px;">
-      <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;
-        border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">🖨️ Print / Save PDF</button>
-      <button onclick="closePrintSession('displayPlan','display-plan-overlay','display-plan-style')"
-        style="background:#6b7280;color:#fff;border:none;border-radius:5px;
-        padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" id="dp-opt-subject" onchange="
+          document.getElementById('display-plan-pages').innerHTML = window._buildDisplayPlanPages(window._getDisplayPlanOpts());
+        "> Show subject in cell
+      </label>
+      <div style="display:flex;gap:10px;">
+        <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;
+          border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">🖨️ Print / Save PDF</button>
+        <button onclick="closePrintSession('displayPlan','display-plan-overlay','display-plan-style')"
+          style="background:#6b7280;color:#fff;border:none;border-radius:5px;
+          padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+      </div>
     </div>`;
   overlay.appendChild(toolbar);
 
   const wrap = document.createElement('div');
+  wrap.id = 'display-plan-pages';
   wrap.style.cssText = 'padding:10mm 0 0 0;background:#fff;';
-  const frag = document.createDocumentFragment();
 
+  function buildRoomsHTML(opts) {
+  let html = '';
   roomNos.forEach(roomNo => {
     const roomSeated   = seated.filter(s => s.roomNo === roomNo);
     const roomAllSeats = fullSeatMap[roomNo] || {};
@@ -2418,12 +2436,26 @@ export function printDisplayPlan() {
       const key = s.class+'|'+sub.code;
       if (!seenKey.has(key)) { seenKey.add(key); combos.push({ cls: s.class, sub }); }
     });
+    // Group same-class rows together so the exam name only needs to print once per class
+    combos.sort((a,b) => a.cls===b.cls ? a.sub.code.localeCompare(b.sub.code) : (a.cls==='X'?-1:1));
 
-    const subHeaderRows = combos.map(({cls, sub}) => {
+    // One row per class: exam name once, subjects comma-joined on one line
+    // ("Sub:" prefix only on the first subject) so multi-subject rooms stay on one A4 page.
+    const byClass = new Map();
+    combos.forEach(({cls, sub}) => {
+      if (!byClass.has(cls)) byClass.set(cls, []);
+      byClass.get(cls).push(sub);
+    });
+    const subFont = combos.length > 1 ? '11pt' : '16pt';
+    const examFont = combos.length > 1 ? '13pt' : '16pt';
+    const subHeaderRows = [...byClass.entries()].map(([cls, subs]) => {
       const cl = getExamLabel(cls);
+      const subsLabel = subs
+        .map((sub, i) => `${i===0 ? 'Sub: ' : ''}${sub.code}-${sub.name.toUpperCase()}`)
+        .join(', ');
       return `<tr>
-        <td style="border:none;padding:3pt 0;font-size:16pt;font-weight:bold;color:#000;width:50%;">${cl}</td>
-        <td style="border:none;padding:3pt 0;font-size:16pt;font-weight:bold;color:#000;text-align:right;width:50%;">Sub: ${sub.code}-${sub.name.toUpperCase()}</td>
+        <td style="border:none;padding:2pt 0;font-size:${examFont};font-weight:bold;color:#000;width:38%;vertical-align:top;">${cl}</td>
+        <td style="border:none;padding:2pt 0;font-size:${subFont};font-weight:bold;color:#000;text-align:right;width:62%;vertical-align:top;">${subsLabel}</td>
       </tr>`;
     }).join('');
 
@@ -2449,9 +2481,14 @@ export function printDisplayPlan() {
           cells += `<td class="dp-xcell"></td>`;
         } else {
           const s = physMap[pr+','+col];
-          cells += s
-            ? `<td class="dp-roll"><span>${s.roll}</span></td>`
-            : `<td class="dp-vacant"></td>`;
+          if (!s) {
+            cells += `<td class="dp-vacant"></td>`;
+          } else if (opts.showSubject) {
+            const sub = (s.dateSubjects[ds]||[])[0];
+            cells += `<td class="dp-roll"><div class="dp-cell-inner"><span class="dp-num">${s.roll}</span>${sub ? `<span class="dp-sub">${sub.code}-${sub.name.toUpperCase()}</span>` : ''}</div></td>`;
+          } else {
+            cells += `<td class="dp-roll"><span class="dp-num">${s.roll}</span></td>`;
+          }
         }
       }
       dataRows += `<tr>${cells}</tr>`;
@@ -2487,10 +2524,17 @@ export function printDisplayPlan() {
         </tr></tfoot>
       </table>
     </div>`;
-    frag.appendChild(div.firstElementChild);
+    html += div.firstElementChild.outerHTML;
   });
+  return html;
+  }
 
-  wrap.appendChild(frag);
+  wrap.innerHTML = buildRoomsHTML(getOpts());
+
+  // Expose helpers for live re-render on checkbox change
+  window._getDisplayPlanOpts    = getOpts;
+  window._buildDisplayPlanPages = buildRoomsHTML;
+
   overlay.appendChild(wrap);
   document.body.appendChild(overlay);
 }
