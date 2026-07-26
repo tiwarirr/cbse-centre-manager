@@ -2862,87 +2862,65 @@ export function printTriplicate() {
     'padding:10px 20px;display:flex;align-items:center;justify-content:space-between;' +
     'font-family:Arial,sans-serif;font-size:13px;';
   toolbar.innerHTML = `<span>📋 Triplicate — ${ds} &nbsp;·&nbsp; ${roomNos.length} room(s)</span>
-    <div style="display:flex;gap:10px;">
-      <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;
-        border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">🖨️ Print / Save PDF</button>
-      <button onclick="closePrintSession('triplicate','triplicate-overlay','triplicate-print-style')"
-        style="background:#6b7280;color:#fff;border:none;border-radius:5px;
-        padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" id="tp-opt-combine" onchange="
+          document.getElementById('triplicate-pages').innerHTML = window._buildTriplicatePages(document.getElementById('tp-opt-combine').checked);
+        "> Combine subjects on one sheet
+      </label>
+      <div style="display:flex;gap:10px;">
+        <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;
+          border-radius:5px;padding:7px 18px;font-size:13px;cursor:pointer;">🖨️ Print / Save PDF</button>
+        <button onclick="closePrintSession('triplicate','triplicate-overlay','triplicate-print-style')"
+          style="background:#6b7280;color:#fff;border:none;border-radius:5px;
+          padding:7px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+      </div>
     </div>`;
   overlay.appendChild(toolbar);
 
   const wrap = document.createElement('div');
+  wrap.id = 'triplicate-pages';
   wrap.style.cssText = 'padding:10mm 0 0 0;background:#fff;';
-  const frag = document.createDocumentFragment();
 
   const SVG_X = "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%25%27 height=%27100%25%27%3E%3Cline x1=%270%27 y1=%270%27 x2=%27100%25%27 y2=%27100%25%27 stroke=%27%23bbb%27 stroke-width=%271.2%27/%3E%3Cline x1=%27100%25%27 y1=%270%27 x2=%270%27 y2=%27100%25%27 stroke=%27%23bbb%27 stroke-width=%271.2%27/%3E%3C/svg%3E";
 
-  roomNos.forEach(roomNo => {
-    const roomSeated   = seated.filter(s => s.roomNo === roomNo);
-    const roomAllSeats = fullSeatMap[roomNo] || {};
+  // X cell: inner div forces height (td height ignored on empty colspan cells)
+  const xcInner = `<div style='width:100%;height:${rowH}mm;background:url("${SVG_X}") no-repeat center/100% 100%;-webkit-print-color-adjust:exact;print-color-adjust:exact;'></div>`;
+  const xcStyle = `border:1.5px solid #000;padding:0;`;
+  const rollStyle = `border:1.5px solid #000;text-align:center;font-size:13pt;font-weight:bold;vertical-align:middle;height:${rowH}mm;white-space:nowrap;padding:0 2px;`;
+  const qpStyle = `border:1.5px solid #000;height:${rowH}mm;`;
 
-    const combos = [];
-    const seenCombo = new Set();
-    roomSeated.forEach(s => {
-      const sub = (s.dateSubjects[ds]||[])[0];
-      if (!sub) return;
-      const key = s.class + '|' + sub.code;
-      if (!seenCombo.has(key)) { seenCombo.add(key); combos.push({ cls: s.class, sub }); }
-    });
+  let cg = '<colgroup>';
+  for (let col = 1; col <= cols; col++) cg += '<col style="width:auto;"><col style="width:20mm;">';
+  cg += '</colgroup>';
 
-    combos.forEach(({ cls, sub }) => {
-      const comboSeated = roomSeated.filter(s => {
-        const cs = (s.dateSubjects[ds]||[])[0];
-        return s.class === cls && cs && cs.code === sub.code;
-      });
-      const total      = comboSeated.length;
-      const classLabel = getExamLabel(cls);
-      const subLine    = `${sub.code}-${sub.name.toUpperCase()}`;
+  let colH = '', subH = '';
+  for (let col = 1; col <= cols; col++) {
+    colH += `<th colspan="2" class="tp-th">ROW ${col}</th>`;
+    subH += `<th class="tp-th2">ROLL NO.</th><th class="tp-th2">QP<br>CODE</th>`;
+  }
 
-      let cg = '<colgroup>';
-      for (let col = 1; col <= cols; col++) cg += '<col style="width:auto;"><col style="width:20mm;">';
-      cg += '</colgroup>';
-
-      let colH = '', subH = '';
+  function buildDataRows(physMap, matches) {
+    let dataRows = '';
+    for (let pr = 1; pr <= tPhysRows; pr++) {
+      let cells = '';
       for (let col = 1; col <= cols; col++) {
-        colH += `<th colspan="2" class="tp-th">ROW ${col}</th>`;
-        subH += `<th class="tp-th2">ROLL NO.</th><th class="tp-th2">QP<br>CODE</th>`;
-      }
-
-      const physMap = {};
-      for (let logR = 1; logR <= rows; logR++) {
-        for (let col = 1; col <= cols; col++) {
-          const seat = (col-1)*rows + logR;
-          physMap[physRow(logR,col,stagger)+','+col] = roomAllSeats[seat];
+        if (isXCell(pr, col, cfg)) {
+          cells += `<td colspan="2" style="${xcStyle}">${xcInner}</td>`;
+        } else {
+          const cand = physMap[pr+','+col];
+          cells += (cand && matches(cand))
+            ? `<td style="${rollStyle}">${cand.roll}</td><td style="${qpStyle}"></td>`
+            : `<td colspan="2" style="${xcStyle}">${xcInner}</td>`;
         }
       }
+      dataRows += `<tr style="height:${rowH}mm;">${cells}</tr>`;
+    }
+    return dataRows;
+  }
 
-      // X cell: inner div forces height (td height ignored on empty colspan cells)
-      const xcInner = `<div style='width:100%;height:${rowH}mm;background:url("${SVG_X}") no-repeat center/100% 100%;-webkit-print-color-adjust:exact;print-color-adjust:exact;'></div>`;
-      const xcStyle = `border:1.5px solid #000;padding:0;`;
-      const rollStyle = `border:1.5px solid #000;text-align:center;font-size:13pt;font-weight:bold;vertical-align:middle;height:${rowH}mm;white-space:nowrap;padding:0 2px;`;
-      const qpStyle = `border:1.5px solid #000;height:${rowH}mm;`;
-
-      let dataRows = '';
-      for (let pr = 1; pr <= tPhysRows; pr++) {
-        let cells = '';
-        for (let col = 1; col <= cols; col++) {
-          if (isXCell(pr, col, cfg)) {
-            cells += `<td colspan="2" style="${xcStyle}">${xcInner}</td>`;
-          } else {
-            const cand    = physMap[pr+','+col];
-            const candSub = cand ? (cand.dateSubjects[ds]||[])[0] : null;
-            const isThis  = cand && cand.class === cls && candSub && candSub.code === sub.code;
-            cells += isThis
-              ? `<td style="${rollStyle}">${cand.roll}</td><td style="${qpStyle}"></td>`
-              : `<td colspan="2" style="${xcStyle}">${xcInner}</td>`;
-          }
-        }
-        dataRows += `<tr style="height:${rowH}mm;">${cells}</tr>`;
-      }
-
-      const div = document.createElement('div');
-      div.innerHTML = `
+  function pageHTML(classLabelHTML, subLineHTML, roomNo, total, dataRows) {
+    return `
       <div class="tp">
         <div>
           <div style="text-align:center;margin-bottom:8pt;">
@@ -2952,10 +2930,7 @@ export function printTriplicate() {
             <td style="font-size:10pt;"><b>Name of Centre :</b> ${centreName}</td>
             <td style="font-size:10pt;text-align:right;"><b>Centre No.: ${centreCode}</b></td>
           </tr></table>
-          <table class="tp-hdr"><tr>
-            <td style="font-size:10pt;font-weight:bold;">${classLabel}</td>
-            <td style="font-size:10pt;font-weight:bold;text-align:right;">Sub: ${subLine}</td>
-          </tr></table>
+          ${classLabelHTML}
           <table style="width:100%;margin-bottom:8pt;"><tr>
             <td style="font-size:10pt;"><b>Day &amp; Date:</b>&nbsp;&nbsp;${dayStr}</td>
             <td style="font-size:14pt;font-weight:bold;text-align:right;">Room No. ${roomNo}</td>
@@ -2984,11 +2959,79 @@ export function printTriplicate() {
           </tr></table>
         </div>
       </div>`;
-      frag.appendChild(div.firstElementChild);
-    });
-  });
+  }
 
-  wrap.appendChild(frag);
+  function buildTriplicatePages(combine) {
+    let html = '';
+    roomNos.forEach(roomNo => {
+      const roomSeated   = seated.filter(s => s.roomNo === roomNo);
+      const roomAllSeats = fullSeatMap[roomNo] || {};
+
+      const physMap = {};
+      for (let logR = 1; logR <= rows; logR++) {
+        for (let col = 1; col <= cols; col++) {
+          const seat = (col-1)*rows + logR;
+          physMap[physRow(logR,col,stagger)+','+col] = roomAllSeats[seat];
+        }
+      }
+
+      const combos = [];
+      const seenCombo = new Set();
+      roomSeated.forEach(s => {
+        const sub = (s.dateSubjects[ds]||[])[0];
+        if (!sub) return;
+        const key = s.class + '|' + sub.code;
+        if (!seenCombo.has(key)) { seenCombo.add(key); combos.push({ cls: s.class, sub }); }
+      });
+
+      if (combine) {
+        // One sheet per room with every subject's roll numbers together.
+        const byClass = new Map();
+        combos.forEach(({cls, sub}) => {
+          if (!byClass.has(cls)) byClass.set(cls, []);
+          byClass.get(cls).push(sub);
+        });
+        const classRows = [...byClass.entries()].map(([cls, subs]) => {
+          const subsLabel = subs
+            .map((sub, i) => `${i===0 ? 'Sub: ' : ''}${sub.code}-${sub.name.toUpperCase()}`)
+            .join(', ');
+          return `<tr>
+            <td style="font-size:10pt;font-weight:bold;">${getExamLabel(cls)}</td>
+            <td style="font-size:10pt;font-weight:bold;text-align:right;">${subsLabel}</td>
+          </tr>`;
+        }).join('');
+        const classLabelHTML = `<table class="tp-hdr">${classRows}</table>`;
+
+        const dataRows = buildDataRows(physMap, () => true);
+        html += pageHTML(classLabelHTML, '', roomNo, roomSeated.length, dataRows);
+      } else {
+        combos.forEach(({ cls, sub }) => {
+          const comboSeated = roomSeated.filter(s => {
+            const cs = (s.dateSubjects[ds]||[])[0];
+            return s.class === cls && cs && cs.code === sub.code;
+          });
+          const total      = comboSeated.length;
+          const classLabelHTML = `<table class="tp-hdr"><tr>
+            <td style="font-size:10pt;font-weight:bold;">${getExamLabel(cls)}</td>
+            <td style="font-size:10pt;font-weight:bold;text-align:right;">Sub: ${sub.code}-${sub.name.toUpperCase()}</td>
+          </tr></table>`;
+
+          const dataRows = buildDataRows(physMap, cand => {
+            const candSub = (cand.dateSubjects[ds]||[])[0];
+            return cand.class === cls && candSub && candSub.code === sub.code;
+          });
+          html += pageHTML(classLabelHTML, '', roomNo, total, dataRows);
+        });
+      }
+    });
+    return html;
+  }
+
+  wrap.innerHTML = buildTriplicatePages(false);
+
+  // Expose helper for live re-render on checkbox change
+  window._buildTriplicatePages = buildTriplicatePages;
+
   overlay.appendChild(wrap);
   document.body.appendChild(overlay);
 }
