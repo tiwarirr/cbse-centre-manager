@@ -465,6 +465,7 @@ export const PRINT_REPORT_REGISTRY = {
   qpStatement:    { overlayId: 'qp-stmt-overlay',       styleId: 'qp-stmt-style',       pageSize: 'A4', orientation: 'portrait',  margins: '20mm' },
   qpRegister:     { overlayId: 'qp-reg-overlay',        styleId: 'qp-reg-style',        pageSize: 'A4', orientation: 'portrait', margins: '10mm 12mm' },
   absenteeDetail: { overlayId: 'absentee-detail-overlay', styleId: 'absentee-detail-style', pageSize: 'A4', orientation: 'portrait', margins: '10mm' },
+  daySummary:     { overlayId: 'day-summary-overlay',    styleId: 'day-summary-style',    pageSize: 'A4', orientation: 'portrait', margins: '10mm' },
 };
 export const PRINT_RUNTIME = {
   active: null,
@@ -2839,6 +2840,10 @@ export function printTriplicate() {
                 font-weight:bold;color:#000;background:#fff; }
     .tp-hdr   { width:100%;margin-bottom:5pt; }
     .tp-foot  { width:100%;margin-bottom:5pt;margin-top:8pt; }
+    .tp-cell-inner { display:flex;flex-direction:column;align-items:center;justify-content:center;
+                    height:100%;line-height:1; }
+    .tp-sub   { font-size:6.5pt;font-weight:bold;color:#000;margin-top:1px;letter-spacing:0.2px;
+                    max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
   `;
   document.head.appendChild(style);
 
@@ -2865,8 +2870,13 @@ export function printTriplicate() {
     <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;">
         <input type="checkbox" id="tp-opt-combine" onchange="
-          document.getElementById('triplicate-pages').innerHTML = window._buildTriplicatePages(document.getElementById('tp-opt-combine').checked);
+          document.getElementById('triplicate-pages').innerHTML = window._buildTriplicatePages(window._getTriplicateOpts());
         "> Combine subjects on one sheet
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" id="tp-opt-subject" onchange="
+          document.getElementById('triplicate-pages').innerHTML = window._buildTriplicatePages(window._getTriplicateOpts());
+        "> Show subject in cell
       </label>
       <div style="display:flex;gap:10px;">
         <button onclick="window.print()" style="background:#1a50d4;color:#fff;border:none;
@@ -2900,7 +2910,7 @@ export function printTriplicate() {
     subH += `<th class="tp-th2">ROLL NO.</th><th class="tp-th2">QP<br>CODE</th>`;
   }
 
-  function buildDataRows(physMap, matches) {
+  function buildDataRows(physMap, matches, showSubject) {
     let dataRows = '';
     for (let pr = 1; pr <= tPhysRows; pr++) {
       let cells = '';
@@ -2909,9 +2919,15 @@ export function printTriplicate() {
           cells += `<td colspan="2" style="${xcStyle}">${xcInner}</td>`;
         } else {
           const cand = physMap[pr+','+col];
-          cells += (cand && matches(cand))
-            ? `<td style="${rollStyle}">${cand.roll}</td><td style="${qpStyle}"></td>`
-            : `<td colspan="2" style="${xcStyle}">${xcInner}</td>`;
+          if (cand && matches(cand)) {
+            const sub = showSubject ? (cand.dateSubjects[ds]||[])[0] : null;
+            const rollCell = sub
+              ? `<td style="${rollStyle}"><div class="tp-cell-inner"><span>${cand.roll}</span><span class="tp-sub">${sub.code}-${sub.name.toUpperCase()}</span></div></td>`
+              : `<td style="${rollStyle}">${cand.roll}</td>`;
+            cells += `${rollCell}<td style="${qpStyle}"></td>`;
+          } else {
+            cells += `<td colspan="2" style="${xcStyle}">${xcInner}</td>`;
+          }
         }
       }
       dataRows += `<tr style="height:${rowH}mm;">${cells}</tr>`;
@@ -2961,7 +2977,15 @@ export function printTriplicate() {
       </div>`;
   }
 
-  function buildTriplicatePages(combine) {
+  function getOpts() {
+    return {
+      combine: document.getElementById('tp-opt-combine')?.checked ?? false,
+      showSubject: document.getElementById('tp-opt-subject')?.checked ?? false
+    };
+  }
+
+  function buildTriplicatePages(opts) {
+    const { combine, showSubject } = opts || {};
     let html = '';
     roomNos.forEach(roomNo => {
       const roomSeated   = seated.filter(s => s.roomNo === roomNo);
@@ -3002,7 +3026,7 @@ export function printTriplicate() {
         }).join('');
         const classLabelHTML = `<table class="tp-hdr">${classRows}</table>`;
 
-        const dataRows = buildDataRows(physMap, () => true);
+        const dataRows = buildDataRows(physMap, () => true, showSubject);
         html += pageHTML(classLabelHTML, '', roomNo, roomSeated.length, dataRows);
       } else {
         combos.forEach(({ cls, sub }) => {
@@ -3019,7 +3043,7 @@ export function printTriplicate() {
           const dataRows = buildDataRows(physMap, cand => {
             const candSub = (cand.dateSubjects[ds]||[])[0];
             return cand.class === cls && candSub && candSub.code === sub.code;
-          });
+          }, showSubject);
           html += pageHTML(classLabelHTML, '', roomNo, total, dataRows);
         });
       }
@@ -3027,9 +3051,10 @@ export function printTriplicate() {
     return html;
   }
 
-  wrap.innerHTML = buildTriplicatePages(false);
+  wrap.innerHTML = buildTriplicatePages(getOpts());
 
-  // Expose helper for live re-render on checkbox change
+  // Expose helpers for live re-render on checkbox change
+  window._getTriplicateOpts    = getOpts;
   window._buildTriplicatePages = buildTriplicatePages;
 
   overlay.appendChild(wrap);
@@ -3871,6 +3896,159 @@ export function printAbsenteeDetail(targetDate) {
       <div style="display:flex;gap:10px;">
         <button class="btn btn-primary btn-sm" onclick="window.print()">🖨️ Print</button>
         <button class="btn btn-outline btn-sm" style="color:#fff;border-color:rgba(255,255,255,0.3)" 
+          onclick="closePrintSession('${session.reportKey}','${overlayId}','${styleId}')">✕ Close</button>
+      </div>
+    </div>
+    <div class="print-content" style="background:#fff;">${pages}</div>
+  `;
+  document.body.appendChild(overlay);
+  registerPrintHooks(session.reportKey, session.beforePrint, session.afterPrint);
+}
+export function printDaySummary(targetDate) {
+  const ds = targetDate || currentDate;
+  if (!ds) {
+    showModal('Select Date', 'Please select an exam date first.');
+    return;
+  }
+  if (!state.generated) {
+    showModal('Not Generated', 'Please generate seating plan first.');
+    return;
+  }
+
+  const session = beginPrintSession({ reportKey: 'daySummary' });
+  const { overlayId, styleId } = session;
+
+  const centreName = document.getElementById('cfg-centre-name').value || 'Centre';
+  const centreCode = document.getElementById('cfg-centre-code').value || '';
+
+  // Get all candidates for this date
+  const dateCands = (state.seating[ds] || []).filter(c => c.roll);
+  if (!dateCands.length) {
+    showModal('No Data', 'No candidates found for ' + ds);
+    return;
+  }
+
+  const att = (state.dateStates[ds] && state.dateStates[ds].attendance) || {};
+
+  // Group by class -> subject code
+  const classGroups = {};
+  dateCands.forEach(c => {
+    const subjects = c.dateSubjects[ds] || [];
+    subjects.forEach(sub => {
+      if (!classGroups[c.class]) classGroups[c.class] = {};
+      const subGroup = classGroups[c.class];
+      if (!subGroup[sub.code]) subGroup[sub.code] = { code: sub.code, name: sub.name, cands: [] };
+      subGroup[sub.code].cands.push(c);
+    });
+  });
+
+  const classes = Object.keys(classGroups).sort((a,b) => a==='X' ? -1 : (b==='X' ? 1 : a.localeCompare(b)));
+
+  let pages = '';
+  classes.forEach(cls => {
+    const subGroup = classGroups[cls];
+    const subCodes = Object.keys(subGroup).sort();
+
+    let rows = '';
+    let totReg = 0, totAbsent = 0, totPresent = 0, totSent = 0;
+
+    subCodes.forEach(code => {
+      const { name, cands } = subGroup[code];
+      const reg     = cands.length;
+      const absent  = cands.filter(c => att[c.roll] === 'A').length;
+      const present = reg - absent;
+      const sent    = present; // Per convention: present candidate = answer book sent
+
+      totReg += reg; totAbsent += absent; totPresent += present; totSent += sent;
+
+      rows += `
+        <tr>
+          <td style="border:1px solid #000;padding:4px 6px;">${cls}-${code}-${name.toUpperCase()}</td>
+          <td style="border:1px solid #000;padding:4px 6px;text-align:center;">${reg}</td>
+          <td style="border:1px solid #000;padding:4px 6px;text-align:center;">${absent}</td>
+          <td style="border:1px solid #000;padding:4px 6px;text-align:center;">${present}</td>
+          <td style="border:1px solid #000;padding:4px 6px;text-align:center;">${sent}</td>
+        </tr>`;
+    });
+
+    rows += `
+      <tr>
+        <td style="border:1px solid #000;padding:4px 6px;font-weight:bold;">TOTAL</td>
+        <td style="border:1px solid #000;padding:4px 6px;text-align:center;font-weight:bold;">${totReg}</td>
+        <td style="border:1px solid #000;padding:4px 6px;text-align:center;font-weight:bold;">${totAbsent}</td>
+        <td style="border:1px solid #000;padding:4px 6px;text-align:center;font-weight:bold;">${totPresent}</td>
+        <td style="border:1px solid #000;padding:4px 6px;text-align:center;font-weight:bold;">${totSent}</td>
+      </tr>`;
+
+    pages += `
+    <div class="day-summary-page" style="width:190mm; margin:0 auto; font-family:Arial, sans-serif; padding:10mm 5mm; page-break-after:always;">
+      <div style="text-align:center; text-decoration:underline; font-weight:bold; font-size:14pt; margin-bottom:20px;">SUMMARY</div>
+
+      <table style="width:100%; border-collapse:collapse; font-size:11pt; margin-bottom:10px;">
+        <tr>
+          <td style="width:150px; font-weight:bold; padding:4px 0;">Center No.:</td>
+          <td style="font-weight:bold; padding:4px 0;">${centreCode}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold; padding:4px 0;">Name of Centre:</td>
+          <td style="padding:4px 0;">${centreName.toUpperCase()}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold; padding:4px 0;">Name of Examination:</td>
+          <td style="padding:4px 0;">${getExamFullUpper(cls)} ${getExamYear()}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold; padding:4px 0;">Day & Date:</td>
+          <td style="padding:4px 0;">${dayName(ds)}, ${ds}</td>
+        </tr>
+      </table>
+
+      <div style="text-align:center; text-decoration:underline; font-weight:bold; font-size:12pt; margin:15px 0 10px 0;">CLASS-${cls}</div>
+
+      <table style="width:100%; border-collapse:collapse; font-size:10.5pt;">
+        <thead>
+          <tr>
+            <th style="border:1px solid #000;padding:5px 6px;background:#fff;">SUBJECT</th>
+            <th style="border:1px solid #000;padding:5px 6px;background:#fff;width:60px;">TOTAL<br>REG.</th>
+            <th style="border:1px solid #000;padding:5px 6px;background:#fff;width:60px;">ABSENT</th>
+            <th style="border:1px solid #000;padding:5px 6px;background:#fff;width:60px;">PRESENT</th>
+            <th style="border:1px solid #000;padding:5px 6px;background:#fff;width:100px;">ANSWER<br>BOOK SENT</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div style="display:flex; justify-content:space-between; margin-top:60px; font-weight:bold; font-size:11pt;">
+        <div>DATE:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${ds}</div>
+        <div style="text-align:right;">Signature of Centre Superintendent</div>
+      </div>
+    </div>
+    `;
+  });
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `${buildPrintShellCSS(session)}
+  .day-summary-page { page-break-after:always; }
+  .day-summary-page:last-child { page-break-after:avoid; }
+  .day-summary-page table thead th {
+    background:#fff!important; color:#000!important;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  `;
+  document.head.appendChild(style);
+
+  const overlay = document.createElement('div');
+  overlay.id = overlayId;
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;';
+  overlay.innerHTML = `
+    <div class="no-print" style="position:sticky;top:0;background:#0c1c35;color:#fff;
+      z-index:10001;padding:10px 20px;display:flex;align-items:center;
+      justify-content:space-between;font-family:Arial,sans-serif;font-size:13px;">
+      <span>📋 Day Summary Report — ${ds}</span>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary btn-sm" onclick="window.print()">🖨️ Print</button>
+        <button class="btn btn-outline btn-sm" style="color:#fff;border-color:rgba(255,255,255,0.3)"
           onclick="closePrintSession('${session.reportKey}','${overlayId}','${styleId}')">✕ Close</button>
       </div>
     </div>

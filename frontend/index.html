@@ -478,6 +478,7 @@
           <button class="btn btn-outline btn-sm" onclick="printAppendixE('X')">📋 Appendix-E (X)</button>
           <button class="btn btn-outline btn-sm" onclick="printAppendixE('XII')">📋 Appendix-E (XII)</button>
           <button class="btn btn-outline btn-sm" onclick="printAbsenteeDetail()">📋 Absentee Detail</button>
+          <button class="btn btn-outline btn-sm" onclick="printDaySummary()">📋 Day Summary</button>
           <button class="btn btn-outline btn-sm" onclick="printQPStatement()">📄 QP Statement</button>
           <button class="btn btn-outline btn-sm" onclick="printBankQPRegister()">📋 Bank QP Register</button>
           <button class="btn btn-primary btn-sm" onclick="printSeating()">🖨️ Print / PDF</button>
@@ -750,6 +751,14 @@
           <div class="export-desc">Subject-wise present/absent roll number report for a specific date.</div>
           <div class="export-btn-row">
             <button class="btn btn-primary btn-sm" onclick="printAbsenteeDetail()">🖨️ Print/PDF</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📋</div>
+          <div class="export-title">Day Summary</div>
+          <div class="export-desc">Per-class, per-subject registered/absent/present/answer-book totals for a specific date.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-primary btn-sm" onclick="printDaySummary()">🖨️ Print/PDF</button>
           </div>
         </div>
         <div class="export-card">
