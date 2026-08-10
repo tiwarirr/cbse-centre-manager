@@ -4,20 +4,58 @@ This document is a working handover for future coding sessions on this project.
 
 ## 1) Project Snapshot
 - Project: **CBSE Centre Management System**
-- Main file: `/Users/aparnatiwari/Downloads/cbse/CBSE_Centre_Manager.html`
-- Architecture: **single HTML file** containing:
-  - UI markup
-  - CSS styles
-  - all JavaScript logic (parser, seating engine, attendance, reports, exports, persistence)
-- Runtime: browser-only (no backend).
+- Legacy main file (kept for reference, no longer the active app): `CBSE_Centre_Manager.html`
+- **Active frontend as of the Phase A modular refactor: `frontend/`** — see §1a.
+- Runtime: browser frontend + a SQLite/Flask backend under `backend/` (Phase B/C of the multi-phase plan — see §1b). `frontend/js/storage.js` keeps localStorage as the authoritative local store (the app works fully offline / with no backend at all) and additionally syncs to the API in the background when reachable and signed in.
 - External dependency: XLSX via CDN (`xlsx.full.min.js`) for Excel exports.
 
+## 1a) Modular Frontend (Phase A refactor)
+The original single-file monolith was mechanically split into ES modules. **No logic was changed** — this was verified with an automated splitter (parses every top-level function/const via `acorn`, buckets by concern, auto-generates cross-module `import`/`export` statements, then verifies every one of the 281 top-level entities survives verbatim) plus an extensive live-browser regression pass.
+
+- `frontend/index.html` — same markup as the original body, just with the inline `<style>`/`<script>` replaced by `<link rel="stylesheet" href="css/styles.css">` and `<script type="module" src="js/main.js"></script>`.
+- `frontend/css/styles.css` — extracted inline styles, unchanged.
+- `frontend/js/` — one file per concern: `constants.js`, `state.js`, `parser.js`, `seating.js`, `attendance.js`, `datesheet.js`, `answerbook.js`, `invigilator.js`, `reports.js`, `ui.js`, `storage.js`, plus `main.js` (boot sequence).
+- Run it: `.claude/launch.json` has a `frontend-static` config (`python -m http.server 8765 --directory frontend`), or run that command yourself and open `http://localhost:8765`.
+
+**Critical gotcha for anyone editing these modules — mutable module-level state:**
+The original file was a classic (non-module) script, so every top-level `function`/`var` was implicitly a `window` property, and the ~150 inline `onclick="..."` (and `onchange`/etc.) attributes in the markup could read/call any of them directly. ES modules don't work that way — `main.js` does `Object.assign(window, someMod)` so functions still resolve correctly (function references never change), but a handful of mutable `let` variables (`currentDate`, `summaryDate`, `_currentDsTab`, etc. — see `LIVE_BINDINGS` in `main.js`) get **reassigned** by their owning module after boot. A plain `Object.assign` copy goes stale the instant that happens, and inline HTML attributes have no way to see a module's live `import` binding (they only ever see `window.*`). `main.js` fixes this with `Object.defineProperty(window, name, { get: () => mod[name] })` for each one, proxying through the module's namespace object (which the ES module spec guarantees always reflects the exporter's *current* value). **If you add a new mutable module-level variable that's read from inline markup (any `on*="..."` attribute, static or template-string-generated), add it to `LIVE_BINDINGS` in `main.js` — otherwise it will silently read stale data.**
+
+Two historical monkeypatches from the original file (`selectDate` being wrapped to also call `renderQPLogTable`, `switchPanel` being wrapped to call `showInvStep(1)` for the invigilator panel) were folded directly into their functions' bodies in `ui.js` rather than replicated as a `window.foo = wrapped` reassignment after the fact — this was necessary because several *other* modules call these functions as bare identifiers via their own `import`, and reassigning `window.foo` doesn't affect an already-bound `import` reference in another module.
+
+## 1b) Backend API + offline-first sync (Phase B/C)
+
+`backend/` is a Flask + SQLAlchemy + Flask-Migrate app implementing the single-centre, single-login backend from the migration plan. Flask serves the frontend directly (`static_folder=frontend/`, `/` returns `index.html`) — same-origin, so session cookies just work with default settings; this is also exactly the PythonAnywhere deployment topology (Phase D). `flask-cors` is configured too, only needed if you choose to run the frontend via a separate dev server on another port (`CORS_ORIGINS` env var, defaults to `http://localhost:8765`).
+
+**Simplest way to run it: `start.ps1` / `start.bat` at the repo root** — creates the venv and installs dependencies on first run if missing, runs `flask db upgrade` (idempotent), prompts for `flask create-admin` only if the database doesn't exist yet, then starts the server. Double-click `start.bat`, or run `.\start.ps1` from PowerShell.
+
+- `backend/models.py` — 17-table relational schema: `users` (one shared login), `sessions` (one row per centre code, mirrors `getConfig()` + centre identity fields — including `centre_head`/`centre_city`/`paper_size`/`colour_theme`/`include_citation`, which the original frontend read back on load but **never actually saved**; this schema, plus the frontend fix below, close that gap), `candidates` + `candidate_subjects`, `date_states` + `seating_assignments` + `attendance`, and the answer-book cluster (`ab_types`, `ab_subject_type_map`, `ab_supp_class_type_map`, `ab_receipts`, `ab_receipt_exceptions`, `ab_assignments`, `ab_damaged_serials`, `ab_supp_assignments`, `ab_supp_damaged_serials`, `ab_audit_log`). `serialRegistry` is deliberately **not** a table — it's a derived cache client-side (`rebuildAnswerBookRegistry()`) and the API reconstructs it the same way (always returns `{}`, matching `getAnswerBookForPersistence()`).
+- `backend/api/sessions.py` — `GET /api/sessions` (list), `GET/PUT/DELETE /api/sessions/<centre_code>`. **Design principle: decompose into relational tables on write, reconstruct the exact JSON shape the frontend already builds/consumes on read** (`session_to_payload()` / the `_insert_*` helpers), so `storage.js` swaps `localStorage` calls for `fetch()` with minimal reshaping. Verified via a full round-trip test (complex payload covering candidates/seating/attendance/answer-book → PUT → GET → diffed field-by-field against the original — matched exactly except one intentionally-dropped empty-string mapping).
+- `backend/auth.py` — `POST /api/auth/login {password}` / `logout` / `GET status`, single shared user (Werkzeug password hash), Flask signed-cookie session. All `/api/sessions/*` routes are gated via a `before_request` hook.
+- Run locally:
+  ```
+  cd backend
+  python -m venv .venv && ./.venv/Scripts/python -m pip install -r requirements.txt   # (or .venv/bin/python on macOS/Linux)
+  export FLASK_APP=app.py
+  ./.venv/Scripts/python -m flask db upgrade      # creates instance/cbse.sqlite3 from migrations/
+  ./.venv/Scripts/python -m flask create-admin    # interactive; or seed a User row directly for scripting/tests
+  ./.venv/Scripts/python wsgi.py                  # serves the whole app (API + frontend) at http://127.0.0.1:5000
+  ```
+- `backend/instance/` (the SQLite file) and `backend/.venv/` are gitignored — never commit them.
+
+**Frontend sync layer (`frontend/js/storage.js`):** localStorage remains authoritative — every existing call site (`saveToBrowser()`, etc.) behaves exactly as in Phase A, and the app works fully offline / with no backend running. Layered on top:
+- `buildSessionPayload()` is now the **single** payload builder shared by `saveToBrowser()` (localStorage), `downloadBackup()` (JSON file), and the sync layer — previously those first two built two subtly different payloads (the backup file silently dropped `invReq`), and neither included `centreHead`/`centreCity`/`paperSize`/`colourTheme`/`includeCitation`. Both gaps are fixed by this refactor.
+- `saveToBrowser()` calls `scheduleSync()` after every local save, which debounces (5s after the last change, forced through after 30s of continuous edits) into `syncNow()` — a `PUT /api/sessions/<centre_code>`. All failure modes (offline, backend down, not signed in, HTTP error) degrade to updating the `#save-time` indicator text and retrying later; nothing throws or blocks the caller.
+- Auth is a simple `prompt()` for the shared password the first time a sync is attempted per page load (`ensureLoggedIn()` in storage.js) — skip it and the app just stays localStorage-only.
+- `checkServerForNewerSession()` runs after `doRestoreSession()` (the "Continue Session" banner): if the server's `savedAt` is newer than what was just loaded from localStorage (e.g. edited from another device/browser), it prompts to pull the server copy in via `confirm()` rather than silently overwriting it on the next sync.
+- `initSyncListeners()` (called once from `main.js`'s boot sequence, **not** at storage.js's top level — every module here is side-effect-free just from being imported, by the same convention established in Phase A) wires a best-effort `keepalive: true` flush on tab-hide and a retry-on-reconnect via the `online` event.
+- Verified live end-to-end in a real browser against a real running backend: login, debounced auto-sync (including a real race-condition catch — a sync attempt firing before an in-flight login resolves), manual `syncNow()`, the conflict-prompt firing/not-firing correctly based on `savedAt`, and full offline resilience (backend killed mid-session — app kept working, indicator degraded gracefully, no console errors, resumed syncing once the backend came back).
+- Also fixed two real Phase-A splitter bugs surfaced while touching this code: the auto-import scanner's "skip identifiers preceded by `.`" rule (meant to avoid `obj.foo` property access) also accidentally skipped identifiers right after a spread operator (`...parseHTML(...)` — the `.` looks the same). Both `storage.js` and `datesheet.js` were missing a `parseHTML` import as a result; `datesheet.js`'s was a live bug in `importDsPaste()`, not just a latent/unreachable one.
+
 ## 2) How To Run
-- Start local server from project folder:
-  - `cd /Users/aparnatiwari/Downloads/cbse`
+- **Modular frontend (current):** `python -m http.server 8765 --directory frontend`, open `http://localhost:8765`. (Or use the `frontend-static` launch config.)
+- **Legacy single-file monolith (reference only):**
   - `python3 -m http.server 8765`
-- Open:
-  - `http://localhost:8765/CBSE_Centre_Manager.html`
+  - Open `http://localhost:8765/CBSE_Centre_Manager.html`
 
 ## 3) Core Workflow (User Journey)
 1. Upload class HTML files (X / XII)

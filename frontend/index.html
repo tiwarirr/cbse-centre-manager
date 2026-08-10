@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBSE Centre Management System</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     SIDEBAR
+     ══════════════════════════════════════════════════════════ -->
+<div id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-badge" id="sb-logo-badge">CBSE 2026</div>
+    <div class="sb-title">Centre Management<br>System</div>
+    <div class="sb-sub" id="sb-centre-info">No centre loaded</div>
+  </div>
+
+  <nav class="sb-nav">
+    <div class="sb-section">Setup</div>
+    <div class="sb-item active" data-panel="upload" onclick="switchPanel('upload')">
+      <span class="icon">📂</span>
+      <span>Upload Files</span>
+      <span class="badge amber" id="badge-upload">!</span>
+    </div>
+    <div class="sb-item" data-panel="config" onclick="switchPanel('config')">
+      <span class="icon">⚙️</span>
+      <span>Configuration</span>
+    </div>
+
+    <div class="sb-section">Generate</div>
+    <div class="sb-item" data-panel="seating" onclick="switchPanel('seating')">
+      <span class="icon">🪑</span>
+      <span>Seating Plan</span>
+      <span class="badge" id="badge-seating" style="display:none">0</span>
+    </div>
+    <div class="sb-item" data-panel="candidates" onclick="switchPanel('candidates')">
+      <span class="icon">👥</span>
+      <span>Candidates</span>
+      <span class="badge green" id="badge-cands" style="display:none">0</span>
+    </div>
+    <div class="sb-item" data-panel="schedule" onclick="switchPanel('schedule')">
+      <span class="icon">📅</span>
+      <span>Seating Summary</span>
+    </div>
+
+    <div class="sb-section">Export</div>
+    <div class="sb-item" data-panel="export" onclick="switchPanel('export')">
+      <span class="icon">📤</span>
+      <span>Export Docs</span>
+    </div>
+    <div class="sb-item" data-panel="datesheet" onclick="switchPanel('datesheet')">
+      <span class="icon">📋</span>
+      <span>Datesheet</span>
+    </div>
+    <div class="sb-item" data-panel="invigilator" onclick="switchPanel('invigilator')">
+      <span class="icon">🏫</span>
+      <span>Invigilator Demand</span>
+    </div>
+  </nav>
+
+  <div class="sb-status">
+    <div class="sb-status-row">Class X <span id="sb-x-count">—</span></div>
+    <div class="sb-status-row">Class XII <span id="sb-xii-count">—</span></div>
+    <div class="sb-status-row">Exam Dates <span id="sb-dates-count">—</span></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MAIN
+     ══════════════════════════════════════════════════════════ -->
+<div id="main">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="topbar-title">Upload Files</div>
+      <div class="topbar-sub" id="topbar-sub">Upload CBSE E-Preeksha HTML files to begin</div>
+    </div>
+    <div class="topbar-right" style="gap:6px;">
+      <span id="save-indicator" style="font-size:11px;color:var(--text-muted);display:none;align-items:center;gap:4px;">
+        <span style="color:#22c55e;">●</span> <span id="save-time">Saved</span>
+      </span>
+      <button class="btn btn-outline btn-sm" onclick="debugStorage()" title="Debug storage" style="background:#f59e0b;color:#000;border-color:#f59e0b;">🔍</button>
+      <select id="session-select" class="form-control" style="height:30px;font-size:11px;min-width:220px;" title="Load a saved session"></select>
+      <button class="btn btn-outline btn-sm" onclick="loadSelectedSession()" title="Load selected saved session">🗂️ Load</button>
+      <button class="btn btn-outline btn-sm" onclick="downloadBackup()" title="Download portable backup file">⬇️ Backup</button>
+      <button class="btn btn-outline btn-sm" onclick="triggerRestoreBackup()" title="Restore from backup file">📂 Restore</button>
+      <input type="file" id="restore-file-input" accept=".json" style="display:none" onchange="restoreFromBackup(event)">
+      <button class="btn btn-outline btn-sm" onclick="newYearReset()" title="Clear candidates and data, keep centre config">🗓️ New Year</button>
+      <button class="btn btn-outline btn-sm" onclick="fullReset()" title="Clear everything including saved session">⚠️ Full Reset</button>
+      <button class="btn btn-accent btn-sm" id="btn-generate" disabled onclick="generateSeating()">⚡ Generate Seating</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ══ PANEL: UPLOAD ══ -->
+    <div id="panel-upload" class="panel active">
+      <div class="section-head">
+        <div>
+          <h2>Upload Candidate Files</h2>
+          <div class="sub">Upload HTML files downloaded from CBSE E-Preeksha portal (Centre/Roll No Wise List)</div>
+        </div>
+      </div>
+
+      <div class="alert alert-info">
+        <div class="alert-icon">ℹ️</div>
+        <div>Download the <strong>Centre/Roll No Wise List of Candidates</strong> from E-Preeksha for both Class X and Class XII. Save as HTML file (Ctrl+S in browser). Upload both files below.</div>
+      </div>
+
+      <div class="upload-grid">
+        <div class="upload-zone" id="zone-12" ondrop="handleDrop(event,'12')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+          <input type="file" accept=".html,.htm" onchange="handleFileSelect(event,'12')">
+          <div class="uz-icon">📋</div>
+          <div class="uz-title">Class XII Candidates</div>
+          <div class="uz-sub">CBSE Class XII — Drop .html file or click to browse</div>
+          <div class="uz-loaded" id="loaded-12">✅ File loaded</div>
+        </div>
+        <div class="upload-zone" id="zone-10" ondrop="handleDrop(event,'10')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+          <input type="file" accept=".html,.htm" onchange="handleFileSelect(event,'10')">
+          <div class="uz-icon">📋</div>
+          <div class="uz-title">Class X Candidates</div>
+          <div class="uz-sub">CBSE Class X — Drop .html file or click to browse</div>
+          <div class="uz-loaded" id="loaded-10">✅ File loaded</div>
+        </div>
+      </div>
+
+      <div id="parse-progress" style="display:none">
+        <div class="alert alert-info">
+          <div class="alert-icon">⏳</div>
+          <div>
+            <strong>Parsing files...</strong>
+            <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:60%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="parse-results" style="display:none">
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-num" id="stat-xii">0</div>
+            <div class="stat-lbl">Class XII Candidates</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-x">0</div>
+            <div class="stat-lbl">Class X Candidates</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-schools">0</div>
+            <div class="stat-lbl">Schools / Sources</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-dates">0</div>
+            <div class="stat-lbl">Exam Dates</div>
+          </div>
+        </div>
+
+        <div class="alert alert-success">
+          <div class="alert-icon">✅</div>
+          <div id="parse-success-msg">Files parsed successfully. Configure seating options and click <strong>Generate Seating</strong>.</div>
+        </div>
+
+        <div id="schools-breakdown" class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>School Code</th><th>School Name</th>
+              <th>Class X</th><th>Class XII</th><th>Total</th>
+            </tr></thead>
+            <tbody id="schools-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PANEL: CONFIG ══ -->
+    <div id="panel-config" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Seating Configuration</h2>
+          <div class="sub">Customise all seating arrangement parameters</div>
+        </div>
+        <button class="btn btn-primary" onclick="generateSeating()">⚡ Apply & Generate</button>
+      </div>
+
+      <div class="config-grid">
+        <div class="config-card">
+          <h3>🪑 Room Layout</h3>
+          <div class="form-row">
+            <label class="form-label">Students per room</label>
+            <select class="form-control" id="cfg-per-room">
+              <option value="12">12 candidates</option>
+              <option value="18">18 candidates</option>
+              <option value="24" selected>24 candidates</option>
+              <option value="30">30 candidates</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </div>
+          <div class="form-row" id="custom-per-room-row" style="display:none">
+            <label class="form-label">Custom count</label>
+            <input type="number" class="form-control" id="cfg-custom-count" min="1" max="60" value="24">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Number of rows</label>
+            <select class="form-control" id="cfg-rows">
+              <option value="4">4 rows</option>
+              <option value="5">5 rows</option>
+              <option value="6" selected>6 rows</option>
+              <option value="7">7 rows</option>
+              <option value="8">8 rows</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Number of columns</label>
+            <select class="form-control" id="cfg-cols">
+              <option value="3">3 columns</option>
+              <option value="4" selected>4 columns</option>
+              <option value="5">5 columns</option>
+              <option value="6">6 columns</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Seat numbering direction</label>
+            <select class="form-control" id="cfg-seat-dir">
+              <option value="rowwise">Row-wise (left to right)</option>
+              <option value="colwise" selected>Column-wise (top to bottom)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <h3>🏫 Class & Subject Rules</h3>
+          <div class="form-row">
+            <label class="form-label">Class order within room</label>
+            <select class="form-control" id="cfg-class-order">
+              <option value="x-first" selected>Class X first, then XII</option>
+              <option value="xii-first">Class XII first, then X</option>
+              <option value="roll">Interleave (by roll within each subject)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Split rooms by</label>
+            <select class="form-control" id="cfg-split">
+              <option value="none" selected>No split — mix all in same room</option>
+              <option value="class">By class (X in separate rooms from XII)</option>
+              <option value="subject">By class & subject</option>
+            </select>
+          </div>
+          <div class="form-row" style="margin-top:16px">
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Separate plan per subject</div>
+                <div class="toggle-sub">Show only one subject per plan; others shown as vacant</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="cfg-separate-plan" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Show vacant seats in mixed rooms</div>
+                <div class="toggle-sub">When subjects are split, show empty seats for other subjects</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="cfg-show-vacant" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Staggered 7-row layout</div>
+                <div class="toggle-sub">Odd cols: X at bottom · Even cols: X at top · 3-set QP compliance</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="cfg-stagger">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Include private candidates</div>
+                <div class="toggle-sub">School code 99999</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="cfg-private" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── DATESHEET & SUBJECT CODES CONFIG ─────────────────── -->
+                <!-- ── EXAM IDENTITY CONFIG ─────────────────── -->
+        <div class="config-card">
+          <h3>🎓 Exam Identity</h3>
+          <div class="form-row">
+            <label class="form-label">Exam Year</label>
+            <input type="number" class="form-control" id="cfg-exam-year" value="2026" min="2000" max="2099" style="width:110px;">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Class X Exam Name (short)</label>
+            <input type="text" class="form-control" id="cfg-exam-name-x" value="Secondary" placeholder="e.g. Secondary">
+            <div style="font-size:11px;color:#64748b;margin-top:3px;">Used in reports as: <em>Secondary-2026</em></div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Class XII Exam Name (short)</label>
+            <input type="text" class="form-control" id="cfg-exam-name-xii" value="Senior Secondary" placeholder="e.g. Senior Secondary">
+            <div style="font-size:11px;color:#64748b;margin-top:3px;">Used in reports as: <em>Senior Secondary-2026</em></div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Full Title — Class X</label>
+            <input type="text" class="form-control" id="cfg-exam-fullname-x" value="Secondary School Certificate Examination" placeholder="Full exam title">
+            <div style="font-size:11px;color:#64748b;margin-top:3px;">Used in attendance sheets &amp; Form-66</div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Full Title — Class XII</label>
+            <input type="text" class="form-control" id="cfg-exam-fullname-xii" value="Senior School Certificate Examination" placeholder="Full exam title">
+            <div style="font-size:11px;color:#64748b;margin-top:3px;">Used in attendance sheets &amp; Form-66</div>
+          </div>
+        </div>
+
+        <div class="config-card" id="datesheet-config-card">
+          <h3 style="cursor:pointer;user-select:none;" onclick="toggleDsConfig()">
+            📅 Datesheet &amp; Subject Codes
+            <span id="ds-config-toggle" style="float:right;font-size:12px;color:#64748b;">▶ Expand to edit</span>
+          </h3>
+          <div id="ds-config-body" style="display:none;">
+            <!-- Hidden storage fields -->
+            <input type="hidden" id="cfg-x-datesheet">
+            <input type="hidden" id="cfg-xii-datesheet">
+            <input type="hidden" id="cfg-x-codes">
+            <input type="hidden" id="cfg-xii-codes">
+
+            <!-- Tabs -->
+            <div style="display:flex;gap:8px;margin-bottom:12px;border-bottom:2px solid #e2e8f0;padding-bottom:0;">
+              <button id="ds-tab-x" onclick="switchDsTab('x')"
+                style="padding:6px 16px;border:none;border-bottom:2px solid #0c1c35;margin-bottom:-2px;background:none;font-weight:700;cursor:pointer;color:#0c1c35;">Class X</button>
+              <button id="ds-tab-xii" onclick="switchDsTab('xii')"
+                style="padding:6px 16px;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;background:none;font-weight:400;cursor:pointer;color:#64748b;">Class XII</button>
+            </div>
+
+            <!-- Class X pane -->
+            <div id="ds-pane-x">
+              <div style="margin-bottom:12px;">
+                <div style="font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📋 Paste Import — Datesheet</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px;">One line per date: <code>27-Feb-2027 041,086,087</code></div>
+                <textarea id="ds-paste-x" rows="5" style="width:100%;font-family:monospace;font-size:11px;border:1px solid #d1d5db;border-radius:6px;padding:6px;box-sizing:border-box;resize:vertical;"
+                  placeholder="27-Feb-2027  041,086,087&#10;28-Feb-2027  043&#10;02-Mar-2027  002,003"></textarea>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                  <button onclick="importDsPaste('x')" class="btn btn-primary btn-sm">⬇ Import</button>
+                  <button onclick="resetDsToDefault('x')" class="btn btn-outline btn-sm">↺ Reset to 2026</button>
+                </div>
+              </div>
+              <div style="font-weight:600;font-size:12px;color:#374151;margin-bottom:6px;">📅 Datesheet Table (Class X)</div>
+              <div id="ds-table-x" style="max-height:250px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
+              <button onclick="addDsRow('x')" class="btn btn-outline btn-sm" style="margin-top:6px;">+ Add Date</button>
+
+              <div style="margin-top:16px;">
+                <div style="font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📋 Paste Import — Subject Codes</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px;">One line per subject: <code>041 Mathematics Standard</code> (also accepts <code>041,Mathematics Standard</code>)</div>
+                <textarea id="codes-paste-x" rows="5" style="width:100%;font-family:monospace;font-size:11px;border:1px solid #d1d5db;border-radius:6px;padding:6px;box-sizing:border-box;resize:vertical;"
+                  placeholder="041  Mathematics Standard&#10;086  Science&#10;087  Social Science"></textarea>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                  <button onclick="importCodesPaste('x')" class="btn btn-primary btn-sm">⬇ Import</button>
+                </div>
+              </div>
+              <div style="margin-top:16px;font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📝 Subject Codes (Class X)</div>
+              <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Edit code↔name mapping used for report headers</div>
+              <div id="codes-table-x" style="max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
+              <button onclick="addCodesRow('x')" class="btn btn-outline btn-sm" style="margin-top:6px;">+ Add Subject</button>
+            </div>
+
+            <!-- Class XII pane -->
+            <div id="ds-pane-xii" style="display:none;">
+              <div style="margin-bottom:12px;">
+                <div style="font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📋 Paste Import — Datesheet</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px;">One line per date: <code>27-Feb-2027 049,050</code></div>
+                <textarea id="ds-paste-xii" rows="5" style="width:100%;font-family:monospace;font-size:11px;border:1px solid #d1d5db;border-radius:6px;padding:6px;box-sizing:border-box;resize:vertical;"
+                  placeholder="27-Feb-2027  049,050&#10;28-Feb-2027  043&#10;02-Mar-2027  002,303"></textarea>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                  <button onclick="importDsPaste('xii')" class="btn btn-primary btn-sm">⬇ Import</button>
+                  <button onclick="resetDsToDefault('xii')" class="btn btn-outline btn-sm">↺ Reset to 2026</button>
+                </div>
+              </div>
+              <div style="font-weight:600;font-size:12px;color:#374151;margin-bottom:6px;">📅 Datesheet Table (Class XII)</div>
+              <div id="ds-table-xii" style="max-height:250px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
+              <button onclick="addDsRow('xii')" class="btn btn-outline btn-sm" style="margin-top:6px;">+ Add Date</button>
+
+              <div style="margin-top:16px;">
+                <div style="font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📋 Paste Import — Subject Codes</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px;">One line per subject: <code>049 Physics</code> (also accepts <code>049,Physics</code>)</div>
+                <textarea id="codes-paste-xii" rows="5" style="width:100%;font-family:monospace;font-size:11px;border:1px solid #d1d5db;border-radius:6px;padding:6px;box-sizing:border-box;resize:vertical;"
+                  placeholder="049  Physics&#10;050  Chemistry&#10;041  Mathematics"></textarea>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                  <button onclick="importCodesPaste('xii')" class="btn btn-primary btn-sm">⬇ Import</button>
+                </div>
+              </div>
+              <div style="margin-top:16px;font-weight:600;font-size:12px;color:#374151;margin-bottom:4px;">📝 Subject Codes (Class XII)</div>
+              <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Edit code↔name mapping used for report headers</div>
+              <div id="codes-table-xii" style="max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
+              <button onclick="addCodesRow('xii')" class="btn btn-outline btn-sm" style="margin-top:6px;">+ Add Subject</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <h3>🖨️ Print & Export</h3>
+          <div class="form-row">
+            <label class="form-label">Paper size</label>
+            <select class="form-control" id="cfg-paper">
+              <option value="A4" selected>A4</option>
+              <option value="A3">A3</option>
+              <option value="Letter">Letter</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Centre name (for headers)</label>
+            <input type="text" class="form-control" id="cfg-centre-name" placeholder="e.g. SUDITI GLOBAL ACADEMY…">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Centre code</label>
+            <input type="text" class="form-control" id="cfg-centre-code" placeholder="e.g. 849205">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Centre Superintendent (CS) Name</label>
+            <input type="text" class="form-control" id="cfg-centre-head" placeholder="e.g. Dr. Ramesh Kumar">
+          </div>
+          <div class="form-row">
+            <label class="form-label">City / District</label>
+            <input type="text" class="form-control" id="cfg-centre-city" placeholder="e.g. Mainpuri, UP">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Colour theme</label>
+            <select class="form-control" id="cfg-colour">
+              <option value="colour" selected>Full colour</option>
+              <option value="grey">Greyscale (save ink)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Include CBSE source citation</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="cfg-citation" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PANEL: SEATING ══ -->
+    <div id="panel-seating" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Seating Plan</h2>
+          <div class="sub" id="seating-sub">Select an exam date to view room layout</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-outline btn-sm" onclick="exportSeatingExcel()">📊 Export Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="printSeatingSummary()">📋 Summary</button>
+          <button class="btn btn-outline btn-sm" onclick="printSeatingSubjectSummary()">📋 Subject Summary</button>
+          <button class="btn btn-outline btn-sm" onclick="printDisplayPlan()">📌 Display Plan</button>
+          <button class="btn btn-outline btn-sm" onclick="printTriplicate()">📋 Triplicate</button>
+          <button class="btn btn-outline btn-sm" onclick="printForm66()">📄 Form-66</button>
+          <button class="btn btn-outline btn-sm" onclick="printCenturySeries()">📊 Century Series</button>
+          <button class="btn btn-outline btn-sm" onclick="printCentreMemo()">📋 Centre Memo</button>
+          <button class="btn btn-outline btn-sm" onclick="printSeatSlips()">🪑 Seat Slips</button>
+          <button class="btn btn-outline btn-sm" onclick="printRoomSummary()">🏫 Room Summary</button>
+          <button class="btn btn-outline btn-sm" onclick="exportAttendanceExcel()">📥 Attendance Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="printAttendanceSheet('X')">📋 Att. Sheet (X)</button>
+          <button class="btn btn-outline btn-sm" onclick="printAttendanceSheet('XII')">📋 Att. Sheet (XII)</button>
+          <button class="btn btn-outline btn-sm" onclick="printAppendixE('X')">📋 Appendix-E (X)</button>
+          <button class="btn btn-outline btn-sm" onclick="printAppendixE('XII')">📋 Appendix-E (XII)</button>
+          <button class="btn btn-outline btn-sm" onclick="printAbsenteeDetail()">📋 Absentee Detail</button>
+          <button class="btn btn-outline btn-sm" onclick="printDaySummary()">📋 Day Summary</button>
+          <button class="btn btn-outline btn-sm" onclick="printQPStatement()">📄 QP Statement</button>
+          <button class="btn btn-outline btn-sm" onclick="printBankQPRegister()">📋 Bank QP Register</button>
+          <button class="btn btn-primary btn-sm" onclick="printSeating()">🖨️ Print / PDF</button>
+        </div>
+      </div>
+
+      <!-- Per-date action bar — shown when a date is selected -->
+      <div id="date-action-bar" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:14px;display:none;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <!-- Date info -->
+          <div style="flex:1;min-width:0;">
+            <span id="dab-date" style="font-weight:700;font-size:14px;color:#0c1c35;"></span>
+            <span id="dab-status-badge" style="margin-left:8px;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;"></span>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="dab-info"></div>
+          </div>
+          <!-- Per-date split -->
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <label style="font-size:11px;color:var(--muted);white-space:nowrap;">Split:</label>
+            <select id="dab-split" class="form-control" style="font-size:12px;padding:4px 8px;height:auto;" onchange="updateDateConfig()">
+              <option value="none">No split</option>
+              <option value="class">By class</option>
+              <option value="subject">By class & subject</option>
+            </select>
+          </div>
+          <!-- Per-date class order -->
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <label style="font-size:11px;color:var(--muted);white-space:nowrap;">Order:</label>
+            <select id="dab-classorder" class="form-control" style="font-size:12px;padding:4px 8px;height:auto;" onchange="updateDateConfig()">
+              <option value="x-first">X first</option>
+              <option value="xii-first">XII first</option>
+              <option value="interleaved">Interleaved</option>
+            </select>
+          </div>
+          <!-- Action buttons -->
+          <button class="btn btn-accent btn-sm" id="dab-generate" onclick="generateDateSeating()">⚡ Generate</button>
+          <button class="btn btn-outline btn-sm" id="dab-order" onclick="openOrderModal()" style="display:none;">⇅ Order</button>
+          <button class="btn btn-outline btn-sm" id="dab-attendance" onclick="openAttendancePanel()" style="display:none;">📋 Attendance</button>
+          <button class="btn btn-outline btn-sm" id="dab-lock" onclick="toggleLock()" style="display:none;"></button>
+        </div>
+      </div>
+
+      <div id="seating-empty" class="empty-state">
+        <div class="empty-icon">🪑</div>
+        <div class="empty-title">No seating plan generated yet</div>
+        <div class="empty-sub">Upload files and click "Generate Seating" to begin</div>
+      </div>
+
+      <div id="seating-content" style="display:none">
+        <div class="grid-legend" style="margin-bottom:12px">
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(5,150,105,0.25);border:1px solid rgba(5,150,105,0.4)"></div>Class X</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(26,80,212,0.15);border:1px solid rgba(26,80,212,0.3)"></div>Class XII</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(0,0,0,0.04);border:1px solid var(--border)"></div>Vacant</div>
+        </div>
+        <div class="date-tabs" id="date-tabs"></div>
+        <div id="subject-tabs-wrap" style="margin-bottom:14px; display:none">
+          <div style="font-family:"DM Mono",monospace;font-size:10px;color:var(--muted);margin-bottom:6px;letter-spacing:1px;">SUBJECT PLAN:</div>
+          <div class="date-tabs" id="subject-tabs"></div>
+        </div>
+        <div id="rooms-output"></div>
+
+        <!-- ── QP LOG ENTRY ────────────────────────────────── -->
+        <div id="qp-log-section" style="display:none;margin-top:20px;">
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div>
+                <div style="font-weight:700;font-size:14px;color:#0c1c35;">📦 QP Log Entry</div>
+                <div style="font-size:11px;color:#64748b;" id="qp-log-sub">Enter QP receipt details for each subject</div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-outline btn-sm" onclick="printQPStatement()">📄 QP Statement</button>
+                <button class="btn btn-outline btn-sm" onclick="printBankQPRegister()">📋 Bank Register</button>
+              </div>
+            </div>
+            <div id="qp-log-table"></div>
+          </div>
+        </div>
+
+        <!-- ── ANSWER BOOK REGISTER ───────────────────────── -->
+        <div id="ab-section" style="display:none;margin-top:20px;">
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
+              <div>
+                <div style="font-weight:700;font-size:14px;color:#0c1c35;">📚 Answer Book Register</div>
+                <div style="font-size:11px;color:#64748b;">Track receipts, serial assignments, damaged/missing serials, and final return balance.</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-outline btn-sm" onclick="exportAnswerBookReceiptExcel()">📥 Receipt Excel</button>
+                <button class="btn btn-outline btn-sm" onclick="exportAnswerBookDaywiseExcel()">📅 Day-wise Excel</button>
+                <button class="btn btn-outline btn-sm" onclick="exportAnswerBookFinalExcel()">🏁 Final Return Excel</button>
+              </div>
+            </div>
+            <div id="ab-content"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PANEL: CANDIDATES ══ -->
+    <div id="panel-candidates" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Candidate List &amp; Attendance</h2>
+          <div class="sub" id="cand-sub">All candidates with seat assignments and attendance</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="exportCandidatesExcel()">📊 Export List</button>
+          <button class="btn btn-outline btn-sm" onclick="exportAttendanceExcel()">📥 Attendance Excel</button>
+        </div>
+      </div>
+
+      <!-- ── View Tabs ── -->
+      <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:12px;">
+        <button id="att-tab-list" onclick="switchAttTab('list')"
+          style="padding:8px 20px;border:none;background:#1a50d4;color:#fff;font-size:13px;cursor:pointer;border-radius:6px 6px 0 0;font-weight:600;">
+          👥 Candidate List
+        </button>
+        <button id="att-tab-pivoted" onclick="switchAttTab('pivoted')"
+          style="padding:8px 20px;border:none;background:var(--card);color:var(--text-muted);font-size:13px;cursor:pointer;border-radius:6px 6px 0 0;margin-left:2px;">
+          📋 CBSE Sheet View
+        </button>
+        <button id="att-tab-summary" onclick="switchAttTab('summary')"
+          style="padding:8px 20px;border:none;background:var(--card);color:var(--text-muted);font-size:13px;cursor:pointer;border-radius:6px 6px 0 0;margin-left:2px;">
+          📊 Summary
+        </button>
+      </div>
+
+      <!-- ── Filters (shared) ── -->
+      <div id="att-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+        <select class="form-control" id="filter-class" style="width:120px" onchange="refreshAttView()">
+          <option value="">All Classes</option>
+          <option value="X">Class X</option>
+          <option value="XII">Class XII</option>
+        </select>
+        <select class="form-control" id="filter-att-date" style="width:150px" onchange="refreshAttView()">
+          <option value="">All Dates</option>
+        </select>
+        <select class="form-control" id="filter-att-subject" style="width:180px" onchange="refreshAttView()">
+          <option value="">All Subjects</option>
+        </select>
+        <select class="form-control" id="filter-att-school" style="width:180px" onchange="refreshAttView()">
+          <option value="">All Schools</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="filter-att-absent" onchange="refreshAttView()">
+          Absents only
+        </label>
+        <input type="text" class="form-control" id="filter-search" placeholder="Search roll / name…"
+          style="width:180px" oninput="refreshAttView()">
+        <span id="att-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
+      </div>
+
+      <!-- ── Tab: Candidate List ── -->
+      <div id="att-view-list">
+        <div class="table-wrap" style="max-height:560px;overflow-y:auto">
+          <table>
+            <thead><tr>
+              <th>Class</th><th>Roll No</th><th>Name</th>
+              <th>Mother</th><th>Father</th><th>Sex</th><th>Cat</th>
+              <th>School</th><th>Exam Date</th><th>Room</th><th>Seat</th><th>Subject(s)</th>
+            </tr></thead>
+            <tbody id="candidates-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Tab: CBSE Pivoted Sheet ── -->
+      <div id="att-view-pivoted" style="display:none;">
+        <div class="table-wrap" style="max-height:560px;overflow-y:auto">
+          <table id="att-pivoted-table" style="border-collapse:collapse;font-size:12px;min-width:100%;">
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Tab: Summary ── -->
+      <div id="att-view-summary" style="display:none;">
+        <div class="table-wrap" style="max-height:560px;overflow-y:auto">
+          <table id="att-summary-table" style="border-collapse:collapse;font-size:12px;width:100%;">
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══ PANEL: SCHEDULE ══ -->
+    <div id="panel-schedule" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Centre Seating Plan Summary</h2>
+          <div class="sub">Consolidated per date + individual class/subject breakdown with room-wise roll ranges</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="exportSummaryExcel()">&#128202; Excel (All)</button>
+          <button class="btn btn-primary btn-sm" onclick="printSummary()">&#128424; Print / PDF</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center">
+        <span style="font-family:"DM Mono",monospace;font-size:11px;color:var(--muted)">VIEW:</span>
+        <button class="btn btn-outline btn-sm" id="view-btn-compact"       onclick="setSummaryView('compact')">📋 Compact (Print Format)</button>
+        <button class="btn btn-primary btn-sm" id="view-btn-both"          onclick="setSummaryView('both')">Both</button>
+        <button class="btn btn-outline btn-sm" id="view-btn-consolidated"  onclick="setSummaryView('consolidated')">Consolidated</button>
+        <button class="btn btn-outline btn-sm" id="view-btn-subject"       onclick="setSummaryView('subject')">Subject-wise</button>
+      </div>
+      <div class="date-tabs" id="summary-date-tabs" style="margin-bottom:16px;"></div>
+      <div id="summary-output"></div>
+    </div>
+
+    <!-- ══ PANEL: EXPORT ══ -->
+    <div id="panel-export" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Export Documents</h2>
+          <div class="sub">Generate and download all required documents</div>
+        </div>
+      </div>
+      <div class="export-grid">
+        <div class="export-card">
+          <div class="export-icon">🪑</div>
+          <div class="export-title">Seating Plan</div>
+          <div class="export-desc">Complete room-wise seating grid with 6×4 layout. Includes separate plan per subject where mixed.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-primary btn-sm" onclick="printSeating()">🖨️ Print/PDF</button>
+            <button class="btn btn-outline btn-sm" onclick="exportSeatingExcel()">📊 Excel</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📋</div>
+          <div class="export-title">Candidate Master List</div>
+          <div class="export-desc">All candidates with roll no, name, room, seat, exam dates. Sortable by school/date/class.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-outline btn-sm" onclick="exportCandidatesExcel()">📊 Excel</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📊</div>
+          <div class="export-title">Date-Room Summary</div>
+          <div class="export-desc">Quick overview: each exam date, rooms needed, roll ranges, subjects.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-outline btn-sm" onclick="exportSummaryExcel()">📊 Excel</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">🏫</div>
+          <div class="export-title">School-wise Report</div>
+          <div class="export-desc">Candidates grouped by school with subject details and exam dates.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-outline btn-sm" onclick="exportSchoolWiseExcel()">📊 Excel</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📅</div>
+          <div class="export-title">Candidate Schedule</div>
+          <div class="export-desc">Individual exam timetable per candidate — every date, room, and seat.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-outline btn-sm" onclick="exportScheduleExcel()">📊 Excel</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📚</div>
+          <div class="export-title">Answer Book Reports</div>
+          <div class="export-desc">Receipt register, day-wise serial usage, and final CBSE return reconciliation.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-outline btn-sm" onclick="exportAnswerBookReceiptExcel()">📥 Receipt</button>
+            <button class="btn btn-outline btn-sm" onclick="exportAnswerBookDaywiseExcel()">📅 Day-wise</button>
+            <button class="btn btn-outline btn-sm" onclick="exportAnswerBookFinalExcel()">🏁 Final</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📋</div>
+          <div class="export-title">Absentee Detail</div>
+          <div class="export-desc">Subject-wise present/absent roll number report for a specific date.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-primary btn-sm" onclick="printAbsenteeDetail()">🖨️ Print/PDF</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📋</div>
+          <div class="export-title">Day Summary</div>
+          <div class="export-desc">Per-class, per-subject registered/absent/present/answer-book totals for a specific date.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-primary btn-sm" onclick="printDaySummary()">🖨️ Print/PDF</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📦</div>
+          <div class="export-title">All Reports (ZIP)</div>
+          <div class="export-desc">Download all Excel reports in a single batch — coming in v1.1.</div>
+          <div class="export-btn-row">
+            <button class="btn btn-outline btn-sm" disabled>📦 Soon</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PANEL: DATESHEET ══ -->
+    <div id="panel-datesheet" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Datesheet Reference</h2>
+          <div class="sub">CBSE Official Revised Datesheet 2026 — Released 30-Dec-2025 (cbse.gov.in)</div>
+        </div>
+      </div>
+      <div class="alert alert-warn">
+        <div class="alert-icon">⚠️</div>
+        <div>Same subject code can mean <strong>different subjects</strong> in Class X and XII (e.g. 041 = Maths Standard in X, Mathematics in XII). The system handles this automatically using class-specific datesheets.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div>
+          <h3 style="font-family:"Syne",sans-serif;font-size:15px;color:var(--navy);margin-bottom:12px">
+            <span class="tag tag-green" style="margin-right:8px">Class X</span> Phase 1 Datesheet
+          </h3>
+          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Subject(s)</th></tr></thead>
+          <tbody id="ds-x-tbody"></tbody></table></div>
+        </div>
+        <div>
+          <h3 style="font-family:"Syne",sans-serif;font-size:15px;color:var(--navy);margin-bottom:12px">
+            <span class="tag tag-blue" style="margin-right:8px">Class XII</span> Datesheet
+          </h3>
+          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Subject(s)</th></tr></thead>
+          <tbody id="ds-xii-tbody"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ══ PANEL: INVIGILATOR DEMAND ══ -->
+    <div id="panel-invigilator" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Invigilator Demand</h2>
+          <div class="sub">School-wise report · Requirement input · Letter generation</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="printInvReport()">🖨️ Print Report</button>
+          <button class="btn btn-primary btn-sm" onclick="generateInvLetters()">📨 Generate Letters</button>
+        </div>
+      </div>
+
+      <!-- Step tabs -->
+      <div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;margin-bottom:20px;">
+        <button id="inv-tab-1" onclick="showInvStep(1)"
+          style="padding:8px 20px;border:none;border-bottom:3px solid #0c1c35;margin-bottom:-2px;background:none;font-weight:700;cursor:pointer;color:#0c1c35;font-size:13px;">
+          1 · School Report
+        </button>
+        <button id="inv-tab-2" onclick="showInvStep(2)"
+          style="padding:8px 20px;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;background:none;font-weight:400;cursor:pointer;color:#64748b;font-size:13px;">
+          2 · Requirements
+        </button>
+        <button id="inv-tab-3" onclick="showInvStep(3)"
+          style="padding:8px 20px;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;background:none;font-weight:400;cursor:pointer;color:#64748b;font-size:13px;">
+          3 · Letters
+        </button>
+      </div>
+
+      <!-- Step 1: School Report -->
+      <div id="inv-step-1">
+        <div class="alert" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;">
+          <span>ℹ️</span>
+          <div>This report shows <strong>date-wise, class &amp; subject-wise candidate count per school</strong>.
+          Use it to decide how many invigilators to demand from each school. Private candidates are shown for total strength accuracy but are excluded from Step 2 requirements.</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <select id="inv-filter-date" class="form-control" style="width:auto;" onchange="renderInvReport()">
+            <option value="all">All Dates</option>
+          </select>
+          <select id="inv-filter-class" class="form-control" style="width:auto;" onchange="renderInvReport()">
+            <option value="all">Both Classes</option>
+            <option value="X">Class X Only</option>
+            <option value="XII">Class XII Only</option>
+          </select>
+        </div>
+        <div id="inv-report-output"></div>
+      </div>
+
+      <!-- Step 2: Requirements -->
+      <div id="inv-step-2" style="display:none;">
+        <div class="alert" style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;">
+          <span>✏️</span>
+          <div>Enter the number of invigilators to demand from each school. The <strong>CS decides</strong> based on the school report above. Click <strong>Save Requirements</strong> when done.</div>
+        </div>
+        <div id="inv-req-output"></div>
+        <div style="margin-top:14px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="saveInvReq()">💾 Save Requirements</button>
+          <button class="btn btn-outline" onclick="showInvStep(1)">← Back to Report</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Letters Preview -->
+      <div id="inv-step-3" style="display:none;">
+        <div class="alert" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;">
+          <span>📨</span>
+          <div>Letters are generated for all schools with invigilator requirements set. Use <strong>Generate Letters</strong> to open the printable view. You can edit the template below before generating.</div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-weight:600;font-size:12px;color:#374151;display:block;margin-bottom:4px;">Letter Template</label>
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;">
+            Available placeholders: <code>{SCHOOL_NAME}</code> <code>{SCHOOL_CODE}</code> <code>{CENTRE_NAME}</code>
+            <code>{CENTRE_CODE}</code> <code>{EXAM_NAME}</code> <code>{EXAM_YEAR}</code> <code>{EXAM_SESSION}</code>
+            <code>{BOARD_EXAM_LABEL}</code> <code>{FIRST_DUTY_DATE}</code> <code>{TOTAL_INVIGILATORS_SUM}</code>
+            <code>{DUTY_DATES_TABLE}</code> <code>{CS_NAME}</code> <code>{CITY}</code> <code>{DATE_TODAY}</code>
+          </div>
+          <textarea id="inv-letter-template" rows="22"
+            style="width:100%;font-family:monospace;font-size:11px;border:1px solid #d1d5db;border-radius:6px;padding:8px;box-sizing:border-box;resize:vertical;line-height:1.6;"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="generateInvLetters()">📨 Generate All Letters</button>
+          <button class="btn btn-outline" onclick="resetInvTemplate()">↺ Reset Template</button>
+          <button class="btn btn-outline" onclick="showInvStep(2)">← Back to Requirements</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3 id="modal-title">Notice</h3>
+    <p id="modal-body"></p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal()">OK</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+
+<!-- ══ SUBJECT ORDER MODAL ══════════════════════════════════════ -->
+<div id="order-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;width:480px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.4);overflow:hidden;">
+
+    <!-- Header -->
+    <div style="background:#0c1c35;color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div>
+        <div style="font-weight:700;font-size:15px;letter-spacing:0.5px;">⇅ Seating Order — <span data-modal-date style="color:#f59e0b;"></span></div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.6);margin-top:2px;">Drag rows to set the order candidates are seated for this date</div>
+      </div>
+      <button onclick="closeOrderModal()" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='none'">✕</button>
+    </div>
+
+    <!-- Toolbar -->
+    <div style="padding:10px 16px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;flex-shrink:0;background:#f9fafb;">
+      <button onclick="resetOrderAuto()" class="btn btn-outline btn-sm">⟳ Auto (by size)</button>
+      <button onclick="resetOrderClassFirst()" class="btn btn-outline btn-sm">🏫 Class then Subject</button>
+      <button onclick="reverseOrder()" class="btn btn-outline btn-sm">↕ Reverse</button>
+    </div>
+
+    <!-- List -->
+    <div style="overflow-y:auto;flex:1;padding:12px 16px;" id="order-list-container">
+      <div id="order-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:#f9fafb;">
+      <span style="font-size:11px;color:#888;">Changes apply on next ⚡ Generate</span>
+      <div style="display:flex;gap:8px;">
+        <button onclick="closeOrderModal()" class="btn btn-outline btn-sm">Cancel</button>
+        <button onclick="applyOrder()" class="btn btn-primary btn-sm">✓ Apply & Generate</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
